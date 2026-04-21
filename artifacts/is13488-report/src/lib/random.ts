@@ -1,4 +1,4 @@
-import type { ReportData, DataManagementPresets } from "./types";
+import type { ReportData, Preset, SpacingOption } from "./types";
 import { v4 } from "./uuid";
 
 function rnd(min: number, max: number, decimals = 2): number {
@@ -8,8 +8,9 @@ function rnd(min: number, max: number, decimals = 2): number {
   return Math.round(v * f) / f;
 }
 
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)] as T;
+function withVar(value: number, variationPct: number, decimals: number, lean = 1): number {
+  const delta = (value * variationPct) / 100;
+  return rnd(value - delta * lean, value + delta * lean, decimals);
 }
 
 function todayStr(): string {
@@ -17,76 +18,80 @@ function todayStr(): string {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
-export function generateRandomReport(p: DataManagementPresets): ReportData {
-  const size = pick(p.sizes);
-  const cls = pick(p.classes);
-  const cat = pick(p.categories);
-  const dis = pick(p.discharges);
-  const sp = pick(p.spacings);
-  const qty = pick(p.qtyOfProduction);
+function pickSpacing(p: Preset, preferred?: string): SpacingOption {
+  const found = preferred ? p.spacings.find((s) => s.id === preferred || String(s.value) === preferred) : null;
+  return found ?? p.spacings[0]!;
+}
+
+export function generateRandomReport(p: Preset, spacingId?: string): ReportData {
+  const sp = pickSpacing(p, spacingId);
 
   const dimensions = Array.from({ length: 3 }).map(() => ({
     insideDiameter: Array.from({ length: 4 }).map(() =>
-      rnd(p.insideDiameter.min, p.insideDiameter.max, p.insideDiameter.decimals),
+      withVar(p.insideDiameter.value, p.insideDiameter.variation * 0.6, 2),
     ),
     wallThickness: Array.from({ length: 4 }).map(() =>
-      rnd(p.wallThickness.min, p.wallThickness.max, p.wallThickness.decimals),
+      withVar(p.wallThickness.value, p.wallThickness.variation * 0.6, 2),
     ),
   }));
 
-  const declaredFlow = rnd(p.flowPath.min, p.flowPath.max, p.flowPath.decimals);
+  const declaredFlow = p.minFlowPath.value;
   const flowValues = Array.from({ length: 5 }).map(() =>
-    rnd(declaredFlow * 0.97, declaredFlow * 1.03, p.flowPath.decimals),
+    withVar(declaredFlow, p.minFlowPath.variation * 0.4, 0),
   );
-  const declaredSpacing = parseFloat(sp);
+
   const spacingValues = Array.from({ length: 10 }).map(() =>
-    rnd(declaredSpacing * 0.97, declaredSpacing * 1.03, p.spacingValue.decimals),
+    withVar(sp.value, sp.variation * 0.6, 2),
   );
 
-  const declaredDischarge = parseFloat(dis) || 2;
+  const declaredDischarge = p.discharge || 2;
   const uniformity = Array.from({ length: 25 }).map(() => ({
-    emissionRate: rnd(declaredDischarge * 0.95, declaredDischarge * 1.05, p.emissionRate.decimals),
+    emissionRate: withVar(declaredDischarge, 5, 2),
   }));
 
-  const hAmbB = Array.from({ length: 5 }).map(() =>
-    rnd(declaredDischarge * 0.95, declaredDischarge * 1.05, p.hydraulicDischarge.decimals),
-  );
-  const hAmbA = hAmbB.map((v) => rnd(v * 0.97, v * 1.03, p.hydraulicDischarge.decimals));
-  const hElB = Array.from({ length: 5 }).map(() =>
-    rnd(declaredDischarge * 0.95, declaredDischarge * 1.05, p.hydraulicDischarge.decimals),
-  );
-  const hElA = hElB.map((v) => rnd(v * 0.97, v * 1.03, p.hydraulicDischarge.decimals));
+  const hAmbB = Array.from({ length: 5 }).map(() => withVar(declaredDischarge, 4, 2));
+  const hAmbA = hAmbB.map((v) => withVar(v, 3, 2));
+  const hElB = Array.from({ length: 5 }).map(() => withVar(declaredDischarge, 4, 2));
+  const hElA = hElB.map((v) => withVar(v, 3, 2));
 
-  const tenB = Array.from({ length: 5 }).map(() =>
-    rnd(declaredDischarge * 0.95, declaredDischarge * 1.05, p.hydraulicDischarge.decimals),
-  );
-  const tenA = tenB.map((v) => rnd(v * 0.97, v * 1.03, p.hydraulicDischarge.decimals));
-  const lenBefore = Array.from({ length: 5 }).map(() => 150);
-  const lenAfter = lenBefore.map(() => rnd(150.2, 151.6, 2));
+  const tenB = Array.from({ length: 5 }).map(() => withVar(declaredDischarge, 4, 2));
+  const tenA = tenB.map((v) => withVar(v, 3, 2));
+  const lenBefore = Array.from({ length: 5 }).map(() => p.specimenLength || 150);
+  const lenAfter = lenBefore.map((v) => rnd(v + 0.2, v + 1.5, 2));
 
-  const carbonCru = rnd(p.carbonWtCrucible.min, p.carbonWtCrucible.max, p.carbonWtCrucible.decimals);
-  const carbonSamp = rnd(p.carbonWtSample.min, p.carbonWtSample.max, p.carbonWtSample.decimals);
-  const carbonAfter = rnd(carbonCru + carbonSamp * 0.95, carbonCru + carbonSamp * 0.99, p.carbonWtAfter.decimals);
+  const carbonCru = rnd(18, 22, 4);
+  const carbonSamp = rnd(0.45, 0.55, 4);
+  const carbonAfter = rnd(carbonCru + carbonSamp * 0.96, carbonCru + carbonSamp * 0.985, 4);
 
-  const pressureRows = [0.5, 1.0, 1.5, 1.8].map((pr) => ({
-    pressure: pr,
-    readings: Array.from({ length: 4 }).map(() => rnd(declaredDischarge * 0.5 * pr, declaredDischarge * 0.6 * pr, 2)),
-  }));
+  const pressureRows = p.declaredDischargePerPressure.map((dp) => {
+    // ml in 360 sec; LPH = ml / 100, so ml ≈ LPH * 100
+    const targetMl = dp.discharge * 100;
+    return {
+      pressure: dp.pressure,
+      readings: Array.from({ length: 4 }).map(() =>
+        Math.round(withVar(targetMl, dp.variation * 0.5, 0)),
+      ),
+    };
+  });
+
+  const loadKn = p.appliedLoad || 0.05;
+  const loadStr = `${loadKn.toFixed(3)} KN`;
 
   return {
     id: v4(),
     createdAt: new Date().toISOString(),
+    presetId: p.id,
     basicInfo: {
       formatNo: "QC/2025-26",
       dateOfMfg: todayStr(),
       dateOfTest: todayStr(),
-      size,
-      discharge: dis,
+      size: p.size,
+      discharge: `${p.discharge} LPH`,
       batchNo: `B-${Math.floor(Math.random() * 9000 + 1000)}`,
-      className: cls,
-      spacing: sp,
-      qtyOfProduction: qty,
-      category: cat,
+      className: p.className,
+      spacing: String(sp.value),
+      qtyOfProduction: "Coils X 500 Mtr",
+      category: p.category,
       mcNo: `M-${Math.floor(Math.random() * 90 + 10)}`,
     },
     dimensions,
@@ -97,14 +102,10 @@ export function generateRandomReport(p: DataManagementPresets): ReportData {
       wtOfCrucibleCarbonAfterHeating: carbonAfter,
     },
     carbonDispersion: "UNIFORM",
-    flowPath: {
-      values: flowValues,
-      declaredMin: declaredFlow,
-      declared: declaredFlow,
-    },
-    spacing: { values: spacingValues, declared: declaredSpacing },
+    flowPath: { values: flowValues, declaredMin: declaredFlow, declared: declaredFlow },
+    spacing: { values: spacingValues, declared: sp.value },
     envCracking: { results: ["PASSED", "PASSED", "PASSED", "PASSED", "PASSED"] },
-    pullOut: { testDuration: "1 Hr.", appliedLoad: `${rnd(50, 80, 1)} N`, result: "PASS" },
+    pullOut: { testDuration: "1 Hr.", appliedLoad: loadStr, result: "PASS" },
     uniformity,
     envCrackingType: { results: ["PASSED", "PASSED", "PASSED", "PASSED", "PASSED"] },
     hydraulicAmbient: { dischargeBefore: hAmbB, dischargeAfter: hAmbA },
@@ -114,38 +115,41 @@ export function generateRandomReport(p: DataManagementPresets): ReportData {
       dischargeAfter: tenA,
       lengthBefore: lenBefore,
       lengthAfter: lenAfter,
-      appliedLoad: `${rnd(40, 60, 1)} N`,
+      appliedLoad: loadStr,
     },
     pressureTest: pressureRows,
   };
 }
 
-export function emptyReport(p: DataManagementPresets): ReportData {
+export function emptyReport(p: Preset, spacingId?: string): ReportData {
+  const sp = pickSpacing(p, spacingId);
   const dim = () => ({ insideDiameter: [0, 0, 0, 0], wallThickness: [0, 0, 0, 0] });
+  const loadStr = p.appliedLoad ? `${p.appliedLoad.toFixed(3)} KN` : "";
   return {
     id: v4(),
     createdAt: new Date().toISOString(),
+    presetId: p.id,
     basicInfo: {
       formatNo: "QC/2025-26",
       dateOfMfg: "",
       dateOfTest: "",
-      size: p.sizes[0] ?? "",
-      discharge: p.discharges[0] ?? "",
+      size: p.size,
+      discharge: `${p.discharge} LPH`,
       batchNo: "",
-      className: p.classes[0] ?? "",
-      spacing: p.spacings[0] ?? "",
-      qtyOfProduction: p.qtyOfProduction[0] ?? "",
-      category: p.categories[0] ?? "",
+      className: p.className,
+      spacing: String(sp.value),
+      qtyOfProduction: "",
+      category: p.category,
       mcNo: "",
     },
     dimensions: [dim(), dim(), dim()],
     visualAppearance: "Satisfy",
     carbonContent: { wtOfCrucible: 0, wtOfCrucibleSample: 0, wtOfCrucibleCarbonAfterHeating: 0 },
     carbonDispersion: "UNIFORM",
-    flowPath: { values: [0, 0, 0, 0, 0], declaredMin: 0, declared: 0 },
-    spacing: { values: Array(10).fill(0), declared: parseFloat(p.spacings[0] ?? "0") || 0 },
+    flowPath: { values: [0, 0, 0, 0, 0], declaredMin: p.minFlowPath.value, declared: p.minFlowPath.value },
+    spacing: { values: Array(10).fill(0), declared: sp.value },
     envCracking: { results: Array(5).fill("PASSED") },
-    pullOut: { testDuration: "1 Hr.", appliedLoad: "", result: "PASS" },
+    pullOut: { testDuration: "1 Hr.", appliedLoad: loadStr, result: "PASS" },
     uniformity: Array.from({ length: 25 }).map(() => ({ emissionRate: 0 })),
     envCrackingType: { results: Array(5).fill("PASSED") },
     hydraulicAmbient: { dischargeBefore: [0, 0, 0, 0, 0], dischargeAfter: [0, 0, 0, 0, 0] },
@@ -153,10 +157,13 @@ export function emptyReport(p: DataManagementPresets): ReportData {
     tension: {
       dischargeBefore: [0, 0, 0, 0, 0],
       dischargeAfter: [0, 0, 0, 0, 0],
-      lengthBefore: [150, 150, 150, 150, 150],
-      lengthAfter: [150, 150, 150, 150, 150],
-      appliedLoad: "",
+      lengthBefore: Array(5).fill(p.specimenLength || 150),
+      lengthAfter: Array(5).fill(p.specimenLength || 150),
+      appliedLoad: loadStr,
     },
-    pressureTest: [0.5, 1.0, 1.5, 1.8].map((pr) => ({ pressure: pr, readings: [0, 0, 0, 0] })),
+    pressureTest: p.declaredDischargePerPressure.map((dp) => ({
+      pressure: dp.pressure,
+      readings: [0, 0, 0, 0],
+    })),
   };
 }

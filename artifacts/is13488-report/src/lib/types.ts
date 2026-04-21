@@ -1,3 +1,4 @@
+// ===== Report data (matches printed format) =====
 export interface BasicInfo {
   formatNo: string;
   dateOfMfg: string;
@@ -62,15 +63,16 @@ export interface TensionTest {
 }
 
 export interface PressureRow {
-  pressure: number; // kg/sq.cm
-  readings: number[]; // 4 readings (3, 12, 13, 23 columns)
+  pressure: number;
+  readings: number[];
 }
 
 export interface ReportData {
   id: string;
   createdAt: string;
+  presetId?: string;
   basicInfo: BasicInfo;
-  dimensions: DimensionRow[]; // 3 samples
+  dimensions: DimensionRow[];
   visualAppearance: string;
   carbonContent: CarbonContent;
   carbonDispersion: string;
@@ -78,37 +80,54 @@ export interface ReportData {
   spacing: SpacingTest;
   envCracking: CrackTest;
   pullOut: PullOutTest;
-  uniformity: UniformityRow[]; // 25 emitting units
+  uniformity: UniformityRow[];
   envCrackingType: CrackTest;
   hydraulicAmbient: HydraulicTest;
   hydraulicElevated: HydraulicTest;
   tension: TensionTest;
-  pressureTest: PressureRow[]; // 4 pressure rows
+  pressureTest: PressureRow[];
 }
 
-export interface RangeConfig {
-  min: number;
-  max: number;
-  decimals: number;
+// ===== Presets =====
+export interface ValVar {
+  value: number;
+  variation: number; // %
 }
 
-export interface DataManagementPresets {
-  sizes: string[];
-  classes: string[];
-  categories: string[];
-  discharges: string[];
-  spacings: string[];
-  qtyOfProduction: string[];
+export interface SpacingOption {
+  id: string;
+  value: number; // cm
+  variation: number; // %
+}
 
-  // Ranges for auto-fill
-  insideDiameter: RangeConfig;
-  wallThickness: RangeConfig;
-  flowPath: RangeConfig;
-  spacingValue: RangeConfig;
-  emissionRate: RangeConfig;
-  hydraulicDischarge: RangeConfig;
-  carbonWtCrucible: RangeConfig;
-  carbonWtSample: RangeConfig;
-  carbonWtAfter: RangeConfig;
-  pressureReading: RangeConfig;
+export interface DischargePerPressure {
+  pressure: number; // kg/sq.cm
+  discharge: number; // LPH
+  variation: number; // %
+}
+
+export interface Preset {
+  id: string;
+  name: string;
+  size: string;
+  className: string;
+  category: string;
+  discharge: number; // LPH
+  minFlowPath: ValVar; // mm + %
+  specimenLength: number; // mm — for sections 7 & 10
+  appliedLoad: number; // KN — for sections 8 & 13
+  insideDiameter: ValVar; // mm + %
+  wallThickness: ValVar; // mm + %
+  declaredDischargePerPressure: DischargePerPressure[];
+  spacings: SpacingOption[];
+}
+
+export interface StandardSpec {
+  id: string;
+  size: string;
+  insideDiameterMin: number;
+  insideDiameterMax: number;
+  wallThicknessMin: number;
+  wallThicknessMax: number;
+  notes: string;
 }
