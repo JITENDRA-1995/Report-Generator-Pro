@@ -1,0 +1,510 @@
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ArrowLeft, Save, Eye, Wand2, Pencil } from "lucide-react";
+import { getPresets, saveReport } from "@/lib/storage";
+import { generateRandomReport, emptyReport } from "@/lib/random";
+import type { ReportData } from "@/lib/types";
+import { ReportTemplate } from "@/components/ReportTemplate";
+
+type Mode = "auto" | "manual" | null;
+
+export default function NewReport() {
+  const presets = useMemo(() => getPresets(), []);
+  const [, navigate] = useLocation();
+  const [mode, setMode] = useState<Mode>(null);
+  const [data, setData] = useState<ReportData | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  useEffect(() => {
+    if (mode === "auto") setData(generateRandomReport(presets));
+    else if (mode === "manual") setData(emptyReport(presets));
+  }, [mode, presets]);
+
+  if (!mode) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="max-w-3xl mx-auto px-6 py-12">
+          <h2 className="text-2xl font-bold mb-1">Create New Test Report</h2>
+          <p className="text-muted-foreground mb-8">Choose how you want to fill the report data.</p>
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card className="p-6 cursor-pointer hover-elevate active-elevate-2" onClick={() => setMode("auto")}>
+              <div className="w-12 h-12 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-4">
+                <Wand2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-semibold mb-1">Auto-fill (Random)</h3>
+              <p className="text-sm text-muted-foreground">
+                All values are randomly generated within the ranges configured in Data Management.
+              </p>
+            </Card>
+            <Card className="p-6 cursor-pointer hover-elevate active-elevate-2" onClick={() => setMode("manual")}>
+              <div className="w-12 h-12 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center mb-4">
+                <Pencil className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-semibold mb-1">Manual Entry</h3>
+              <p className="text-sm text-muted-foreground">Fill in every value yourself.</p>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  if (showPreview) {
+    return (
+      <div className="min-h-screen bg-gray-100">
+        <div className="no-print sticky top-0 z-10 bg-white border-b px-6 py-3 flex gap-2 items-center justify-between">
+          <Button variant="outline" onClick={() => setShowPreview(false)}>
+            <ArrowLeft className="w-4 h-4 mr-1" />
+            Back to edit
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => window.print()}>
+              Print / Export PDF
+            </Button>
+            <Button
+              onClick={() => {
+                saveReport(data);
+                navigate("/saved");
+              }}
+            >
+              <Save className="w-4 h-4 mr-1" />
+              Save Report
+            </Button>
+          </div>
+        </div>
+        <div className="py-4">
+          <ReportTemplate data={data} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-2xl font-bold">{mode === "auto" ? "Auto-filled Report" : "Manual Entry"}</h2>
+            <p className="text-sm text-muted-foreground">
+              Review or edit the basic details below, then preview the full report.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {mode === "auto" && (
+              <Button variant="outline" onClick={() => setData(generateRandomReport(presets))}>
+                <Wand2 className="w-4 h-4 mr-1" />
+                Regenerate
+              </Button>
+            )}
+            <Button onClick={() => setShowPreview(true)}>
+              <Eye className="w-4 h-4 mr-1" />
+              Preview Report
+            </Button>
+          </div>
+        </div>
+
+        <Tabs defaultValue="basic">
+          <TabsList>
+            <TabsTrigger value="basic">Basic Details</TabsTrigger>
+            <TabsTrigger value="dim">Dimensions</TabsTrigger>
+            <TabsTrigger value="flow">Flow & Spacing</TabsTrigger>
+            <TabsTrigger value="uniformity">Uniformity</TabsTrigger>
+            <TabsTrigger value="hyd">Hydraulic / Tension</TabsTrigger>
+            <TabsTrigger value="pres">Pressure</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="basic">
+            <BasicForm data={data} setData={setData} />
+          </TabsContent>
+          <TabsContent value="dim">
+            <DimensionForm data={data} setData={setData} />
+          </TabsContent>
+          <TabsContent value="flow">
+            <FlowSpacingForm data={data} setData={setData} />
+          </TabsContent>
+          <TabsContent value="uniformity">
+            <UniformityForm data={data} setData={setData} />
+          </TabsContent>
+          <TabsContent value="hyd">
+            <HydraulicForm data={data} setData={setData} />
+          </TabsContent>
+          <TabsContent value="pres">
+            <PressureForm data={data} setData={setData} />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+function Header() {
+  const [, navigate] = useLocation();
+  return (
+    <div className="border-b bg-white px-6 py-3 flex items-center gap-3">
+      <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+        <ArrowLeft className="w-4 h-4 mr-1" />
+        Home
+      </Button>
+      <span className="font-semibold">New Test Report</span>
+    </div>
+  );
+}
+
+function field(label: string, child: React.ReactNode) {
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <div className="mt-1">{child}</div>
+    </div>
+  );
+}
+
+function BasicForm({ data, setData }: { data: ReportData; setData: (r: ReportData) => void }) {
+  const presets = useMemo(() => getPresets(), []);
+  const b = data.basicInfo;
+  const upd = (k: keyof typeof b, v: string) =>
+    setData({ ...data, basicInfo: { ...b, [k]: v } });
+
+  const sel = (label: string, k: keyof typeof b, opts: string[]) =>
+    field(
+      label,
+      <Select value={b[k] as string} onValueChange={(v) => upd(k, v)}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {opts.map((o) => (
+            <SelectItem key={o} value={o}>{o}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>,
+    );
+
+  return (
+    <Card className="p-6 mt-4">
+      <div className="grid md:grid-cols-3 gap-4">
+        {field("Format No", <Input value={b.formatNo} onChange={(e) => upd("formatNo", e.target.value)} />)}
+        {field("Date of Mfg", <Input value={b.dateOfMfg} onChange={(e) => upd("dateOfMfg", e.target.value)} />)}
+        {field("Date of Test", <Input value={b.dateOfTest} onChange={(e) => upd("dateOfTest", e.target.value)} />)}
+        {sel("Size", "size", presets.sizes)}
+        {sel("Class", "className", presets.classes)}
+        {sel("Discharge", "discharge", presets.discharges)}
+        {field("Batch No", <Input value={b.batchNo} onChange={(e) => upd("batchNo", e.target.value)} />)}
+        {sel("Spacing (cm)", "spacing", presets.spacings)}
+        {sel("Qty of Production", "qtyOfProduction", presets.qtyOfProduction)}
+        {sel("Category", "category", presets.categories)}
+        {field("M/C No", <Input value={b.mcNo} onChange={(e) => upd("mcNo", e.target.value)} />)}
+      </div>
+    </Card>
+  );
+}
+
+function NumGrid({
+  rows,
+  cols,
+  values,
+  set,
+  rowLabels,
+  colLabels,
+}: {
+  rows: number;
+  cols: number;
+  values: number[][];
+  set: (r: number, c: number, v: number) => void;
+  rowLabels: string[];
+  colLabels: string[];
+}) {
+  return (
+    <table className="w-full border text-sm">
+      <thead>
+        <tr>
+          <th className="border p-1"></th>
+          {colLabels.map((c) => (
+            <th key={c} className="border p-1">{c}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: rows }).map((_, r) => (
+          <tr key={r}>
+            <td className="border p-1 font-medium">{rowLabels[r]}</td>
+            {Array.from({ length: cols }).map((_, c) => (
+              <td key={c} className="border p-1">
+                <Input
+                  type="number"
+                  step="any"
+                  className="h-8"
+                  value={values[r]?.[c] ?? 0}
+                  onChange={(e) => set(r, c, parseFloat(e.target.value) || 0)}
+                />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function DimensionForm({ data, setData }: { data: ReportData; setData: (r: ReportData) => void }) {
+  const setId = (r: number, c: number, v: number) => {
+    const next = data.dimensions.map((row, i) =>
+      i === r ? { ...row, insideDiameter: row.insideDiameter.map((x, j) => (j === c ? v : x)) } : row,
+    );
+    setData({ ...data, dimensions: next });
+  };
+  const setWt = (r: number, c: number, v: number) => {
+    const next = data.dimensions.map((row, i) =>
+      i === r ? { ...row, wallThickness: row.wallThickness.map((x, j) => (j === c ? v : x)) } : row,
+    );
+    setData({ ...data, dimensions: next });
+  };
+  return (
+    <Card className="p-6 mt-4 space-y-6">
+      <div>
+        <h3 className="font-semibold mb-2">Inside Diameter (mm)</h3>
+        <NumGrid
+          rows={3}
+          cols={4}
+          rowLabels={["1", "2", "3"]}
+          colLabels={["I", "II", "III", "IV"]}
+          values={data.dimensions.map((d) => d.insideDiameter)}
+          set={setId}
+        />
+      </div>
+      <div>
+        <h3 className="font-semibold mb-2">Wall Thickness (mm)</h3>
+        <NumGrid
+          rows={3}
+          cols={4}
+          rowLabels={["1", "2", "3"]}
+          colLabels={["I", "II", "III", "IV"]}
+          values={data.dimensions.map((d) => d.wallThickness)}
+          set={setWt}
+        />
+      </div>
+    </Card>
+  );
+}
+
+function FlowSpacingForm({ data, setData }: { data: ReportData; setData: (r: ReportData) => void }) {
+  return (
+    <Card className="p-6 mt-4 space-y-6">
+      <div>
+        <h3 className="font-semibold mb-2">Flow Path (mm) — 5 samples</h3>
+        <div className="grid grid-cols-5 gap-2">
+          {data.flowPath.values.map((v, i) => (
+            <Input
+              key={i}
+              type="number"
+              step="any"
+              value={v}
+              onChange={(e) => {
+                const next = [...data.flowPath.values];
+                next[i] = parseFloat(e.target.value) || 0;
+                setData({ ...data, flowPath: { ...data.flowPath, values: next } });
+              }}
+            />
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          {field(
+            "Declared Min (mm)",
+            <Input
+              type="number"
+              step="any"
+              value={data.flowPath.declaredMin}
+              onChange={(e) =>
+                setData({ ...data, flowPath: { ...data.flowPath, declaredMin: parseFloat(e.target.value) || 0 } })
+              }
+            />,
+          )}
+          {field(
+            "Declared (mm)",
+            <Input
+              type="number"
+              step="any"
+              value={data.flowPath.declared}
+              onChange={(e) =>
+                setData({ ...data, flowPath: { ...data.flowPath, declared: parseFloat(e.target.value) || 0 } })
+              }
+            />,
+          )}
+        </div>
+      </div>
+      <div>
+        <h3 className="font-semibold mb-2">Spacing of Emitting Unit (cm) — 10 samples</h3>
+        <div className="grid grid-cols-5 gap-2">
+          {data.spacing.values.map((v, i) => (
+            <Input
+              key={i}
+              type="number"
+              step="any"
+              value={v}
+              onChange={(e) => {
+                const next = [...data.spacing.values];
+                next[i] = parseFloat(e.target.value) || 0;
+                setData({ ...data, spacing: { ...data.spacing, values: next } });
+              }}
+            />
+          ))}
+        </div>
+        <div className="mt-3 max-w-xs">
+          {field(
+            "Declared Spacing (cm)",
+            <Input
+              type="number"
+              step="any"
+              value={data.spacing.declared}
+              onChange={(e) =>
+                setData({ ...data, spacing: { ...data.spacing, declared: parseFloat(e.target.value) || 0 } })
+              }
+            />,
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function UniformityForm({ data, setData }: { data: ReportData; setData: (r: ReportData) => void }) {
+  return (
+    <Card className="p-6 mt-4">
+      <h3 className="font-semibold mb-2">Uniformity of Emission Rate — 25 emitting units (LPH)</h3>
+      <div className="grid grid-cols-5 gap-2">
+        {data.uniformity.map((u, i) => (
+          <div key={i}>
+            <Label className="text-xs">{i + 1}</Label>
+            <Input
+              type="number"
+              step="any"
+              value={u.emissionRate}
+              onChange={(e) => {
+                const next = [...data.uniformity];
+                next[i] = { emissionRate: parseFloat(e.target.value) || 0 };
+                setData({ ...data, uniformity: next });
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function HydraulicForm({ data, setData }: { data: ReportData; setData: (r: ReportData) => void }) {
+  const sectionEditor = (
+    label: string,
+    section: "hydraulicAmbient" | "hydraulicElevated" | "tension",
+    field: "dischargeBefore" | "dischargeAfter" | "lengthBefore" | "lengthAfter",
+  ) => (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <div className="grid grid-cols-5 gap-2 mt-1">
+        {(data[section] as any)[field].map((v: number, i: number) => (
+          <Input
+            key={i}
+            type="number"
+            step="any"
+            value={v}
+            onChange={(e) => {
+              const arr = [...(data[section] as any)[field]];
+              arr[i] = parseFloat(e.target.value) || 0;
+              setData({ ...data, [section]: { ...(data[section] as any), [field]: arr } });
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <Card className="p-6 mt-4 space-y-6">
+      <div className="space-y-3">
+        <h3 className="font-semibold">11. Hydraulic Pressure at Ambient Temp.</h3>
+        {sectionEditor("Discharge Before (LPH)", "hydraulicAmbient", "dischargeBefore")}
+        {sectionEditor("Discharge After (LPH)", "hydraulicAmbient", "dischargeAfter")}
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">12. Hydraulic Pressure at Elevated Temp.</h3>
+        {sectionEditor("Discharge Before (LPH)", "hydraulicElevated", "dischargeBefore")}
+        {sectionEditor("Discharge After (LPH)", "hydraulicElevated", "dischargeAfter")}
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">13. Tension at Elevated Temp.</h3>
+        {sectionEditor("Discharge Before (LPH)", "tension", "dischargeBefore")}
+        {sectionEditor("Discharge After (LPH)", "tension", "dischargeAfter")}
+        {sectionEditor("Length Before (mm)", "tension", "lengthBefore")}
+        {sectionEditor("Length After (mm)", "tension", "lengthAfter")}
+      </div>
+    </Card>
+  );
+}
+
+function PressureForm({ data, setData }: { data: ReportData; setData: (r: ReportData) => void }) {
+  return (
+    <Card className="p-6 mt-4">
+      <h3 className="font-semibold mb-2">14. Emission Rate vs Inlet Pressure (4 readings each)</h3>
+      <table className="w-full border text-sm">
+        <thead>
+          <tr>
+            <th className="border p-1">Pressure (kg/sq.cm)</th>
+            <th className="border p-1">Reading 3</th>
+            <th className="border p-1">Reading 12</th>
+            <th className="border p-1">Reading 13</th>
+            <th className="border p-1">Reading 23</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.pressureTest.map((row, r) => (
+            <tr key={r}>
+              <td className="border p-1">
+                <Input
+                  type="number"
+                  step="any"
+                  value={row.pressure}
+                  onChange={(e) => {
+                    const next = [...data.pressureTest];
+                    next[r] = { ...row, pressure: parseFloat(e.target.value) || 0 };
+                    setData({ ...data, pressureTest: next });
+                  }}
+                />
+              </td>
+              {row.readings.map((v, c) => (
+                <td key={c} className="border p-1">
+                  <Input
+                    type="number"
+                    step="any"
+                    value={v}
+                    onChange={(e) => {
+                      const next = [...data.pressureTest];
+                      const readings = [...row.readings];
+                      readings[c] = parseFloat(e.target.value) || 0;
+                      next[r] = { ...row, readings };
+                      setData({ ...data, pressureTest: next });
+                    }}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
