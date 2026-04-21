@@ -259,7 +259,7 @@ function Page1({ data }: { data: ReportData }) {
           </tr>
           <tr>
             <td>Reagent : 10 % Igepoal CO-630</td>
-            <td colSpan={2}>Specimen Length :</td>
+            <td colSpan={2}>Specimen Length : 150 mm</td>
           </tr>
           <tr>
             <th>Sample No</th>
@@ -443,7 +443,7 @@ function Page3({ data }: { data: ReportData }) {
           </tr>
           <tr>
             <td>Reagent : 10 % Igepoal CO-630</td>
-            <td colSpan={4}>Specimen Length :</td>
+            <td colSpan={4}>Specimen Length : 150 mm</td>
           </tr>
           <tr>
             <th>Sample No</th>
@@ -513,6 +513,10 @@ function Page3({ data }: { data: ReportData }) {
             <td colSpan={4}>Applied Load : {data.tension.appliedLoad}</td>
           </tr>
           <tr>
+            <td>Specimen Length : 150 mm</td>
+            <td colSpan={4}></td>
+          </tr>
+          <tr>
             <th>Sample No</th>
             {["I", "II", "III", "IV", "V"].map((x) => (
               <th key={x}>{x}</th>
@@ -534,25 +538,6 @@ function Page3({ data }: { data: ReportData }) {
             <td>Deviation ( % )</td>
             {data.tension.dischargeBefore.map((v, i) => {
               const a = data.tension.dischargeAfter[i] ?? 0;
-              return <td key={i} className="center">{fmt(v ? ((a - v) / v) * 100 : 0)}</td>;
-            })}
-          </tr>
-          <tr>
-            <td>Length Before Test (mm)</td>
-            {data.tension.lengthBefore.map((v, i) => (
-              <td key={i} className="center">{fmt(v)}</td>
-            ))}
-          </tr>
-          <tr>
-            <td>Length After Test (mm)</td>
-            {data.tension.lengthAfter.map((v, i) => (
-              <td key={i} className="center">{fmt(v)}</td>
-            ))}
-          </tr>
-          <tr>
-            <td>Deviation ( % )</td>
-            {data.tension.lengthBefore.map((v, i) => {
-              const a = data.tension.lengthAfter[i] ?? 0;
               return <td key={i} className="center">{fmt(v ? ((a - v) / v) * 100 : 0)}</td>;
             })}
           </tr>
