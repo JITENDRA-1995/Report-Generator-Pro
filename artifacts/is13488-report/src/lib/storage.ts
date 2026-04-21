@@ -2,47 +2,12 @@ import type { ReportData, Preset, StandardSpec } from "./types";
 import { v4 } from "./uuid";
 
 const REPORTS_KEY = "is13488_reports_v1";
-const PRESETS_KEY = "is13488_presets_v2";
+const PRESETS_KEY = "is13488_presets_v3";
 const SPECS_KEY = "is13488_specs_v1";
 
-export const defaultPresets: Preset[] = [
-  {
-    id: "preset-default-16-2lph",
-    name: '16 mm — Class 2.5 — 2 LPH',
-    size: "16 mm",
-    className: "2.5",
-    category: "B, Unregulated",
-    discharge: 2,
-    minFlowPath: { value: 300, variation: 10 },
-    specimenLength: 150,
-    appliedLoad: 0.06,
-    insideDiameter: { value: 14.0, variation: 5 },
-    wallThickness: { value: 1.0, variation: 8 },
-    declaredDischargePerPressure: [
-      { pressure: 0.5, discharge: 1.4, variation: 10 },
-      { pressure: 1.0, discharge: 2.0, variation: 10 },
-      { pressure: 1.5, discharge: 2.45, variation: 10 },
-      { pressure: 1.8, discharge: 2.7, variation: 10 },
-    ],
-    spacings: [
-      { id: v4(), value: 30, variation: 5 },
-      { id: v4(), value: 40, variation: 5 },
-      { id: v4(), value: 50, variation: 5 },
-    ],
-  },
-];
+export const defaultPresets: Preset[] = [];
 
-export const defaultSpecs: StandardSpec[] = [
-  {
-    id: "spec-16",
-    size: "16 mm",
-    insideDiameterMin: 13.8,
-    insideDiameterMax: 14.2,
-    wallThicknessMin: 0.9,
-    wallThicknessMax: 1.1,
-    notes: "As per IS 13488:2008 Annexure",
-  },
-];
+export const defaultSpecs: StandardSpec[] = [];
 
 // ----- Reports -----
 export function getReports(): ReportData[] {
@@ -72,13 +37,10 @@ export function deleteReport(id: string): void {
 export function getPresets(): Preset[] {
   try {
     const raw = localStorage.getItem(PRESETS_KEY);
-    if (!raw) {
-      localStorage.setItem(PRESETS_KEY, JSON.stringify(defaultPresets));
-      return defaultPresets;
-    }
+    if (!raw) return [];
     return JSON.parse(raw);
   } catch {
-    return defaultPresets;
+    return [];
   }
 }
 
@@ -105,23 +67,20 @@ export function getPreset(id: string): Preset | null {
 export function blankPreset(): Preset {
   return {
     id: v4(),
-    name: "New Preset",
+    name: "",
     size: "",
     className: "",
     category: "B, Unregulated",
     discharge: 0,
-    minFlowPath: { value: 0, variation: 10 },
-    specimenLength: 150,
+    minFlowPath: { value: 0, min: 0, max: 0 },
+    specimenLength: 0,
     appliedLoad: 0,
-    insideDiameter: { value: 0, variation: 5 },
-    wallThickness: { value: 0, variation: 8 },
+    insideDiameter: { value: 0, min: 0, max: 0 },
+    wallThickness: { value: 0, min: 0, max: 0 },
     declaredDischargePerPressure: [
-      { pressure: 0.5, discharge: 0, variation: 10 },
-      { pressure: 1.0, discharge: 0, variation: 10 },
-      { pressure: 1.5, discharge: 0, variation: 10 },
-      { pressure: 1.8, discharge: 0, variation: 10 },
+      { pressure: 0, discharge: 0, min: 0, max: 0 },
     ],
-    spacings: [{ id: v4(), value: 30, variation: 5 }],
+    spacings: [{ id: v4(), value: 0, min: 0, max: 0 }],
   };
 }
 
@@ -129,13 +88,10 @@ export function blankPreset(): Preset {
 export function getSpecs(): StandardSpec[] {
   try {
     const raw = localStorage.getItem(SPECS_KEY);
-    if (!raw) {
-      localStorage.setItem(SPECS_KEY, JSON.stringify(defaultSpecs));
-      return defaultSpecs;
-    }
+    if (!raw) return [];
     return JSON.parse(raw);
   } catch {
-    return defaultSpecs;
+    return [];
   }
 }
 

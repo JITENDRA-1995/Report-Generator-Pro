@@ -89,21 +89,24 @@ export interface ReportData {
 }
 
 // ===== Presets =====
-export interface ValVar {
+export interface ValRange {
   value: number;
-  variation: number; // %
+  min: number;
+  max: number;
 }
 
 export interface SpacingOption {
   id: string;
-  value: number; // cm
-  variation: number; // %
+  value: number;
+  min: number;
+  max: number;
 }
 
 export interface DischargePerPressure {
-  pressure: number; // kg/sq.cm
-  discharge: number; // LPH
-  variation: number; // %
+  pressure: number;
+  discharge: number;
+  min: number;
+  max: number;
 }
 
 export interface Preset {
@@ -112,12 +115,12 @@ export interface Preset {
   size: string;
   className: string;
   category: string;
-  discharge: number; // LPH
-  minFlowPath: ValVar; // mm + %
-  specimenLength: number; // mm — for sections 7 & 10
-  appliedLoad: number; // KN — for sections 8 & 13
-  insideDiameter: ValVar; // mm + %
-  wallThickness: ValVar; // mm + %
+  discharge: number;
+  minFlowPath: ValRange;
+  specimenLength: number;
+  appliedLoad: number;
+  insideDiameter: ValRange;
+  wallThickness: ValRange;
   declaredDischargePerPressure: DischargePerPressure[];
   spacings: SpacingOption[];
 }

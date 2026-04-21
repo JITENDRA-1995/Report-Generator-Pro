@@ -57,6 +57,35 @@ export default function DataManagement() {
   );
 }
 
+// ----- shared input that treats 0 as empty -----
+function NumInput({
+  value,
+  onChange,
+  placeholder,
+  step = "any",
+  className,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  placeholder?: string;
+  step?: string;
+  className?: string;
+}) {
+  return (
+    <Input
+      type="number"
+      step={step}
+      placeholder={placeholder}
+      className={className}
+      value={value === 0 || Number.isNaN(value) ? "" : value}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange(v === "" ? 0 : parseFloat(v) || 0);
+      }}
+    />
+  );
+}
+
 // ===================== PRESETS =====================
 function PresetsTab() {
   const [presets, setPresets] = useState<Preset[]>(getPresets());
@@ -100,9 +129,9 @@ function PresetsTab() {
             <Card key={p.id} className="p-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="font-semibold text-lg">{p.name}</div>
+                  <div className="font-semibold text-lg">{p.name || "(unnamed)"}</div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    {p.size} · Class {p.className} · {p.discharge} LPH · {p.category}
+                    {p.size || "—"} · Class {p.className || "—"} · {p.discharge || 0} LPH · {p.category}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
                     Spacings: {p.spacings.map((s) => `${s.value}cm`).join(", ") || "—"}
@@ -117,7 +146,12 @@ function PresetsTab() {
                     variant="ghost"
                     title="Duplicate"
                     onClick={() => {
-                      const dup: Preset = { ...p, id: v4(), name: `${p.name} (copy)`, spacings: p.spacings.map((s) => ({ ...s, id: v4() })) };
+                      const dup: Preset = {
+                        ...p,
+                        id: v4(),
+                        name: p.name ? `${p.name} (copy)` : "",
+                        spacings: p.spacings.map((s) => ({ ...s, id: v4() })),
+                      };
                       upsertPreset(dup);
                       refresh();
                     }}
@@ -139,7 +173,7 @@ function PresetsTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete preset?</AlertDialogTitle>
             <AlertDialogDescription>
-              "{confirmDel?.name}" will be removed permanently.
+              "{confirmDel?.name || "(unnamed)"}" will be removed permanently.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -162,50 +196,37 @@ function PresetsTab() {
   );
 }
 
-function NumInput({
-  value,
-  onChange,
-  step = "any",
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  step?: string;
-}) {
-  return (
-    <Input
-      type="number"
-      step={step}
-      value={value}
-      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-    />
-  );
-}
-
-function ValVarRow({
+function ValRangeRow({
   label,
   unit,
   value,
-  variation,
+  min,
+  max,
   onChange,
 }: {
   label: string;
   unit: string;
   value: number;
-  variation: number;
-  onChange: (value: number, variation: number) => void;
+  min: number;
+  max: number;
+  onChange: (value: number, min: number, max: number) => void;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-2 items-end">
+    <div className="grid grid-cols-4 gap-3 items-end">
       <div className="col-span-1">
-        <Label className="text-xs">{label}</Label>
+        <Label className="text-sm font-medium">{label}</Label>
       </div>
       <div>
         <Label className="text-xs text-muted-foreground">Value ({unit})</Label>
-        <NumInput value={value} onChange={(v) => onChange(v, variation)} />
+        <NumInput value={value} placeholder="value" onChange={(v) => onChange(v, min, max)} />
       </div>
       <div>
-        <Label className="text-xs text-muted-foreground">Allowed Variation (%)</Label>
-        <NumInput value={variation} onChange={(v) => onChange(value, v)} />
+        <Label className="text-xs text-muted-foreground">Min ({unit})</Label>
+        <NumInput value={min} placeholder="min" onChange={(v) => onChange(value, v, max)} />
+      </div>
+      <div>
+        <Label className="text-xs text-muted-foreground">Max ({unit})</Label>
+        <NumInput value={max} placeholder="max" onChange={(v) => onChange(value, min, v)} />
       </div>
     </div>
   );
@@ -227,7 +248,7 @@ function PresetEditor({
   return (
     <div className="mt-4 space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold">{preset.name === "New Preset" ? "Create Preset" : "Edit Preset"}</h2>
+        <h2 className="text-xl font-bold">{preset.name ? "Edit Preset" : "Create Preset"}</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={onCancel}>
             <X className="w-4 h-4 mr-1" /> Cancel
@@ -243,57 +264,60 @@ function PresetEditor({
         <div className="grid md:grid-cols-3 gap-4">
           <div>
             <Label className="text-xs">Preset Name</Label>
-            <Input value={p.name} onChange={(e) => upd("name", e.target.value)} />
+            <Input value={p.name} placeholder="e.g. 16 mm Class 2.5 - 2 LPH" onChange={(e) => upd("name", e.target.value)} />
           </div>
           <div>
             <Label className="text-xs">Size</Label>
-            <Input value={p.size} onChange={(e) => upd("size", e.target.value)} placeholder="e.g. 16 mm" />
+            <Input value={p.size} placeholder="e.g. 16 mm" onChange={(e) => upd("size", e.target.value)} />
           </div>
           <div>
             <Label className="text-xs">Class</Label>
-            <Input value={p.className} onChange={(e) => upd("className", e.target.value)} placeholder="e.g. 2.5" />
+            <Input value={p.className} placeholder="e.g. 2.5" onChange={(e) => upd("className", e.target.value)} />
           </div>
           <div>
             <Label className="text-xs">Category</Label>
-            <Input value={p.category} onChange={(e) => upd("category", e.target.value)} />
+            <Input value={p.category} placeholder="e.g. B, Unregulated" onChange={(e) => upd("category", e.target.value)} />
           </div>
           <div>
             <Label className="text-xs">Discharge (LPH)</Label>
-            <NumInput value={p.discharge} onChange={(v) => upd("discharge", v)} />
+            <NumInput value={p.discharge} placeholder="e.g. 2" onChange={(v) => upd("discharge", v)} />
           </div>
           <div>
             <Label className="text-xs">Specimen Length (mm) — Sr No 7 & 10</Label>
-            <NumInput value={p.specimenLength} onChange={(v) => upd("specimenLength", v)} />
+            <NumInput value={p.specimenLength} placeholder="e.g. 150" onChange={(v) => upd("specimenLength", v)} />
           </div>
           <div>
             <Label className="text-xs">Applied Load (KN) — Sr No 8 & 13</Label>
-            <NumInput value={p.appliedLoad} onChange={(v) => upd("appliedLoad", v)} />
+            <NumInput value={p.appliedLoad} placeholder="e.g. 0.06" onChange={(v) => upd("appliedLoad", v)} />
           </div>
         </div>
       </Card>
 
       <Card className="p-6 space-y-4">
-        <h3 className="font-semibold">Limits & Variations</h3>
-        <ValVarRow
+        <h3 className="font-semibold">Limits — value, allowed minimum, allowed maximum</h3>
+        <ValRangeRow
           label="Min. Flow Path"
           unit="mm"
           value={p.minFlowPath.value}
-          variation={p.minFlowPath.variation}
-          onChange={(value, variation) => upd("minFlowPath", { value, variation })}
+          min={p.minFlowPath.min}
+          max={p.minFlowPath.max}
+          onChange={(value, min, max) => upd("minFlowPath", { value, min, max })}
         />
-        <ValVarRow
+        <ValRangeRow
           label="Inside Diameter (ID)"
           unit="mm"
           value={p.insideDiameter.value}
-          variation={p.insideDiameter.variation}
-          onChange={(value, variation) => upd("insideDiameter", { value, variation })}
+          min={p.insideDiameter.min}
+          max={p.insideDiameter.max}
+          onChange={(value, min, max) => upd("insideDiameter", { value, min, max })}
         />
-        <ValVarRow
+        <ValRangeRow
           label="Wall Thickness"
           unit="mm"
           value={p.wallThickness.value}
-          variation={p.wallThickness.variation}
-          onChange={(value, variation) => upd("wallThickness", { value, variation })}
+          min={p.wallThickness.min}
+          max={p.wallThickness.max}
+          onChange={(value, min, max) => upd("wallThickness", { value, min, max })}
         />
       </Card>
 
@@ -306,7 +330,7 @@ function PresetEditor({
             onClick={() =>
               upd("declaredDischargePerPressure", [
                 ...p.declaredDischargePerPressure,
-                { pressure: 0, discharge: 0, variation: 10 },
+                { pressure: 0, discharge: 0, min: 0, max: 0 },
               ])
             }
           >
@@ -315,10 +339,11 @@ function PresetEditor({
         </div>
         <table className="w-full border text-sm">
           <thead>
-            <tr>
+            <tr className="bg-muted">
               <th className="border p-2">Pressure (kg/sq.cm)</th>
               <th className="border p-2">Discharge (LPH)</th>
-              <th className="border p-2">Allowed Variation (%)</th>
+              <th className="border p-2">Allowed Min (LPH)</th>
+              <th className="border p-2">Allowed Max (LPH)</th>
               <th className="border p-2 w-12"></th>
             </tr>
           </thead>
@@ -328,6 +353,7 @@ function PresetEditor({
                 <td className="border p-1">
                   <NumInput
                     value={row.pressure}
+                    placeholder="pressure"
                     onChange={(v) => {
                       const next = [...p.declaredDischargePerPressure];
                       next[i] = { ...row, pressure: v };
@@ -338,6 +364,7 @@ function PresetEditor({
                 <td className="border p-1">
                   <NumInput
                     value={row.discharge}
+                    placeholder="discharge"
                     onChange={(v) => {
                       const next = [...p.declaredDischargePerPressure];
                       next[i] = { ...row, discharge: v };
@@ -347,10 +374,22 @@ function PresetEditor({
                 </td>
                 <td className="border p-1">
                   <NumInput
-                    value={row.variation}
+                    value={row.min}
+                    placeholder="min"
                     onChange={(v) => {
                       const next = [...p.declaredDischargePerPressure];
-                      next[i] = { ...row, variation: v };
+                      next[i] = { ...row, min: v };
+                      upd("declaredDischargePerPressure", next);
+                    }}
+                  />
+                </td>
+                <td className="border p-1">
+                  <NumInput
+                    value={row.max}
+                    placeholder="max"
+                    onChange={(v) => {
+                      const next = [...p.declaredDischargePerPressure];
+                      next[i] = { ...row, max: v };
                       upd("declaredDischargePerPressure", next);
                     }}
                   />
@@ -381,19 +420,20 @@ function PresetEditor({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => upd("spacings", [...p.spacings, { id: v4(), value: 30, variation: 5 }])}
+            onClick={() => upd("spacings", [...p.spacings, { id: v4(), value: 0, min: 0, max: 0 }])}
           >
             <Plus className="w-4 h-4 mr-1" /> Add Spacing
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          When creating a new report, the user will see a dropdown of these spacings.
+          When creating a new report the user will see a dropdown of these spacings.
         </p>
         <table className="w-full border text-sm">
           <thead>
-            <tr>
+            <tr className="bg-muted">
               <th className="border p-2">Spacing (cm)</th>
-              <th className="border p-2">Allowed Variation (%)</th>
+              <th className="border p-2">Allowed Min (cm)</th>
+              <th className="border p-2">Allowed Max (cm)</th>
               <th className="border p-2 w-12"></th>
             </tr>
           </thead>
@@ -403,6 +443,7 @@ function PresetEditor({
                 <td className="border p-1">
                   <NumInput
                     value={s.value}
+                    placeholder="value"
                     onChange={(v) => {
                       const next = [...p.spacings];
                       next[i] = { ...s, value: v };
@@ -412,10 +453,22 @@ function PresetEditor({
                 </td>
                 <td className="border p-1">
                   <NumInput
-                    value={s.variation}
+                    value={s.min}
+                    placeholder="min"
                     onChange={(v) => {
                       const next = [...p.spacings];
-                      next[i] = { ...s, variation: v };
+                      next[i] = { ...s, min: v };
+                      upd("spacings", next);
+                    }}
+                  />
+                </td>
+                <td className="border p-1">
+                  <NumInput
+                    value={s.max}
+                    placeholder="max"
+                    onChange={(v) => {
+                      const next = [...p.spacings];
+                      next[i] = { ...s, max: v };
                       upd("spacings", next);
                     }}
                   />
@@ -497,22 +550,22 @@ function SpecsTab() {
             {specs.map((s) => (
               <tr key={s.id}>
                 <td className="border p-1">
-                  <Input value={s.size} onChange={(e) => updateRow({ ...s, size: e.target.value })} />
+                  <Input value={s.size} placeholder="e.g. 16 mm" onChange={(e) => updateRow({ ...s, size: e.target.value })} />
                 </td>
                 <td className="border p-1">
-                  <NumInput value={s.insideDiameterMin} onChange={(v) => updateRow({ ...s, insideDiameterMin: v })} />
+                  <NumInput value={s.insideDiameterMin} placeholder="min" onChange={(v) => updateRow({ ...s, insideDiameterMin: v })} />
                 </td>
                 <td className="border p-1">
-                  <NumInput value={s.insideDiameterMax} onChange={(v) => updateRow({ ...s, insideDiameterMax: v })} />
+                  <NumInput value={s.insideDiameterMax} placeholder="max" onChange={(v) => updateRow({ ...s, insideDiameterMax: v })} />
                 </td>
                 <td className="border p-1">
-                  <NumInput value={s.wallThicknessMin} onChange={(v) => updateRow({ ...s, wallThicknessMin: v })} />
+                  <NumInput value={s.wallThicknessMin} placeholder="min" onChange={(v) => updateRow({ ...s, wallThicknessMin: v })} />
                 </td>
                 <td className="border p-1">
-                  <NumInput value={s.wallThicknessMax} onChange={(v) => updateRow({ ...s, wallThicknessMax: v })} />
+                  <NumInput value={s.wallThicknessMax} placeholder="max" onChange={(v) => updateRow({ ...s, wallThicknessMax: v })} />
                 </td>
                 <td className="border p-1">
-                  <Input value={s.notes} onChange={(e) => updateRow({ ...s, notes: e.target.value })} />
+                  <Input value={s.notes} placeholder="notes" onChange={(e) => updateRow({ ...s, notes: e.target.value })} />
                 </td>
                 <td className="border p-1 text-center">
                   <Button

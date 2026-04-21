@@ -1,21 +1,12 @@
-import type { ReportData, Preset, SpacingOption } from "./types";
+import type { ReportData, Preset, SpacingOption, BasicInfo } from "./types";
 import { v4 } from "./uuid";
 
 function rnd(min: number, max: number, decimals = 2): number {
   if (min === max) return min;
+  if (min > max) [min, max] = [max, min];
   const v = min + Math.random() * (max - min);
   const f = Math.pow(10, decimals);
   return Math.round(v * f) / f;
-}
-
-function withVar(value: number, variationPct: number, decimals: number, lean = 1): number {
-  const delta = (value * variationPct) / 100;
-  return rnd(value - delta * lean, value + delta * lean, decimals);
-}
-
-function todayStr(): string {
-  const d = new Date();
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
 function pickSpacing(p: Preset, preferred?: string): SpacingOption {
@@ -23,39 +14,39 @@ function pickSpacing(p: Preset, preferred?: string): SpacingOption {
   return found ?? p.spacings[0]!;
 }
 
-export function generateRandomReport(p: Preset, spacingId?: string): ReportData {
+export function generateRandomReport(p: Preset, spacingId: string | undefined, overrides: Partial<BasicInfo>): ReportData {
   const sp = pickSpacing(p, spacingId);
 
   const dimensions = Array.from({ length: 3 }).map(() => ({
     insideDiameter: Array.from({ length: 4 }).map(() =>
-      withVar(p.insideDiameter.value, p.insideDiameter.variation * 0.6, 2),
+      rnd(p.insideDiameter.min, p.insideDiameter.max, 2),
     ),
     wallThickness: Array.from({ length: 4 }).map(() =>
-      withVar(p.wallThickness.value, p.wallThickness.variation * 0.6, 2),
+      rnd(p.wallThickness.min, p.wallThickness.max, 2),
     ),
   }));
 
   const declaredFlow = p.minFlowPath.value;
   const flowValues = Array.from({ length: 5 }).map(() =>
-    withVar(declaredFlow, p.minFlowPath.variation * 0.4, 0),
+    rnd(p.minFlowPath.min, p.minFlowPath.max, 0),
   );
 
   const spacingValues = Array.from({ length: 10 }).map(() =>
-    withVar(sp.value, sp.variation * 0.6, 2),
+    rnd(sp.min, sp.max, 2),
   );
 
   const declaredDischarge = p.discharge || 2;
   const uniformity = Array.from({ length: 25 }).map(() => ({
-    emissionRate: withVar(declaredDischarge, 5, 2),
+    emissionRate: rnd(declaredDischarge * 0.95, declaredDischarge * 1.05, 2),
   }));
 
-  const hAmbB = Array.from({ length: 5 }).map(() => withVar(declaredDischarge, 4, 2));
-  const hAmbA = hAmbB.map((v) => withVar(v, 3, 2));
-  const hElB = Array.from({ length: 5 }).map(() => withVar(declaredDischarge, 4, 2));
-  const hElA = hElB.map((v) => withVar(v, 3, 2));
+  const hAmbB = Array.from({ length: 5 }).map(() => rnd(declaredDischarge * 0.96, declaredDischarge * 1.04, 2));
+  const hAmbA = hAmbB.map((v) => rnd(v * 0.97, v * 1.03, 2));
+  const hElB = Array.from({ length: 5 }).map(() => rnd(declaredDischarge * 0.96, declaredDischarge * 1.04, 2));
+  const hElA = hElB.map((v) => rnd(v * 0.97, v * 1.03, 2));
 
-  const tenB = Array.from({ length: 5 }).map(() => withVar(declaredDischarge, 4, 2));
-  const tenA = tenB.map((v) => withVar(v, 3, 2));
+  const tenB = Array.from({ length: 5 }).map(() => rnd(declaredDischarge * 0.96, declaredDischarge * 1.04, 2));
+  const tenA = tenB.map((v) => rnd(v * 0.97, v * 1.03, 2));
   const lenBefore = Array.from({ length: 5 }).map(() => p.specimenLength || 150);
   const lenAfter = lenBefore.map((v) => rnd(v + 0.2, v + 1.5, 2));
 
@@ -64,12 +55,11 @@ export function generateRandomReport(p: Preset, spacingId?: string): ReportData 
   const carbonAfter = rnd(carbonCru + carbonSamp * 0.96, carbonCru + carbonSamp * 0.985, 4);
 
   const pressureRows = p.declaredDischargePerPressure.map((dp) => {
-    // ml in 360 sec; LPH = ml / 100, so ml ≈ LPH * 100
-    const targetMl = dp.discharge * 100;
+    // ml in 360 sec; LPH = ml / 100 → ml ≈ LPH * 100
     return {
       pressure: dp.pressure,
       readings: Array.from({ length: 4 }).map(() =>
-        Math.round(withVar(targetMl, dp.variation * 0.5, 0)),
+        Math.round(rnd(dp.min * 100, dp.max * 100, 0)),
       ),
     };
   });
@@ -83,16 +73,17 @@ export function generateRandomReport(p: Preset, spacingId?: string): ReportData 
     presetId: p.id,
     basicInfo: {
       formatNo: "QC/2025-26",
-      dateOfMfg: todayStr(),
-      dateOfTest: todayStr(),
+      dateOfMfg: "",
+      dateOfTest: "",
       size: p.size,
       discharge: `${p.discharge} LPH`,
-      batchNo: `B-${Math.floor(Math.random() * 9000 + 1000)}`,
+      batchNo: "",
       className: p.className,
       spacing: String(sp.value),
-      qtyOfProduction: "Coils X 500 Mtr",
+      qtyOfProduction: "",
       category: p.category,
-      mcNo: `M-${Math.floor(Math.random() * 90 + 10)}`,
+      mcNo: "",
+      ...overrides,
     },
     dimensions,
     visualAppearance: "Satisfy",
@@ -121,7 +112,7 @@ export function generateRandomReport(p: Preset, spacingId?: string): ReportData 
   };
 }
 
-export function emptyReport(p: Preset, spacingId?: string): ReportData {
+export function emptyReport(p: Preset, spacingId: string | undefined, overrides: Partial<BasicInfo>): ReportData {
   const sp = pickSpacing(p, spacingId);
   const dim = () => ({ insideDiameter: [0, 0, 0, 0], wallThickness: [0, 0, 0, 0] });
   const loadStr = p.appliedLoad ? `${p.appliedLoad.toFixed(3)} KN` : "";
@@ -141,6 +132,7 @@ export function emptyReport(p: Preset, spacingId?: string): ReportData {
       qtyOfProduction: "",
       category: p.category,
       mcNo: "",
+      ...overrides,
     },
     dimensions: [dim(), dim(), dim()],
     visualAppearance: "Satisfy",
