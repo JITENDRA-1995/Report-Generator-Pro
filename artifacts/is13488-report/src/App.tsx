@@ -8,17 +8,21 @@ import NewReport from "@/pages/NewReport";
 import SavedReports from "@/pages/SavedReports";
 import DataManagement from "@/pages/DataManagement";
 
+import { Layout } from "@/components/Layout";
+
 const queryClient = new QueryClient();
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/new" component={NewReport} />
-      <Route path="/saved" component={SavedReports} />
-      <Route path="/data" component={DataManagement} />
-      <Route component={NotFound} />
-    </Switch>
+    <Layout>
+      <Switch>
+        <Route path="/" component={Home} />
+        <Route path="/new" component={NewReport} />
+        <Route path="/saved" component={SavedReports} />
+        <Route path="/data" component={DataManagement} />
+        <Route component={NotFound} />
+      </Switch>
+    </Layout>
   );
 }
 

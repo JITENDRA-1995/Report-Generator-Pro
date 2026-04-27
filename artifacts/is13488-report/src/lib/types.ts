@@ -11,6 +11,9 @@ export interface BasicInfo {
   qtyOfProduction: string;
   category: string;
   mcNo: string;
+  specimenLength: string;
+  reportType: "Daily" | "Weekly";
+  cbcPerformed: boolean;
 }
 
 export interface DimensionRow {
@@ -65,6 +68,7 @@ export interface TensionTest {
 export interface PressureRow {
   pressure: number;
   readings: number[];
+  declared: number;
 }
 
 export interface ReportData {
@@ -86,6 +90,7 @@ export interface ReportData {
   hydraulicElevated: HydraulicTest;
   tension: TensionTest;
   pressureTest: PressureRow[];
+  forcedM?: number;
 }
 
 // ===== Presets =====
@@ -107,6 +112,14 @@ export interface DischargePerPressure {
   discharge: number;
   min: number;
   max: number;
+  r3Min?: number;
+  r3Max?: number;
+  r12Min?: number;
+  r12Max?: number;
+  r13Min?: number;
+  r13Max?: number;
+  r23Min?: number;
+  r23Max?: number;
 }
 
 export interface Preset {
@@ -118,19 +131,34 @@ export interface Preset {
   discharge: number;
   minFlowPath: ValRange;
   specimenLength: number;
+  lengthBeforeTest: number;
   appliedLoad: number;
+  carbonCrucibleWeight: ValRange;
+  carbonCrucibleWeights?: ValRange[];
+  carbonSampleWeight: ValRange;
+  carbonPercentage: ValRange;
   insideDiameter: ValRange;
   wallThickness: ValRange;
   declaredDischargePerPressure: DischargePerPressure[];
   spacings: SpacingOption[];
 }
 
+export interface StandardHeaderCustomization {
+  id: string;
+  size: string;
+  className: string;
+  headers: Record<string, string>; // key = sr no. (e.g. "1", "3", "5"), value = header text
+}
+
 export interface StandardSpec {
   id: string;
   size: string;
+  className: string;
+  discharge: string;
   insideDiameterMin: number;
   insideDiameterMax: number;
   wallThicknessMin: number;
   wallThicknessMax: number;
+  flowPathMin: number;
   notes: string;
 }

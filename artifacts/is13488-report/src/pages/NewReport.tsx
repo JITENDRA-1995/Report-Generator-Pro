@@ -12,13 +12,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Save, Eye, Wand2, Pencil } from "lucide-react";
-import { getPresets, saveReport } from "@/lib/storage";
+import { ArrowLeft, Save, Eye, Wand2, Pencil, Download, Printer } from "lucide-react";
+import { getPresets, saveReport, getDefaultPresetId } from "@/lib/storage";
 import { generateRandomReport, emptyReport } from "@/lib/random";
 import type { BasicInfo, Preset, ReportData } from "@/lib/types";
 import { ReportTemplate } from "@/components/ReportTemplate";
 
-type Step = "preset" | "mode" | "edit";
+type Step = "initial" | "preset" | "mode" | "edit";
 type Mode = "auto" | "manual";
 
 const MC_NO_OPTIONS = [
@@ -42,15 +42,38 @@ function isoToBatch(iso: string): string {
   return iso.replace(/-/g, "");
 }
 
+import { HeaderActions } from "@/components/HeaderActions";
+
 export default function NewReport() {
   const presets = useMemo(() => getPresets(), []);
   const [, navigate] = useLocation();
-  const [step, setStep] = useState<Step>("preset");
-  const [presetId, setPresetId] = useState<string>(presets[0]?.id ?? "");
+  const [step, setStep] = useState<Step>("initial");
+  const [presetId, setPresetId] = useState<string>(() => {
+    const defId = getDefaultPresetId();
+    // Use saved default if it exists in presets list, otherwise fall back to first preset
+    return (defId && presets.some(p => p.id === defId)) ? defId : (presets[0]?.id ?? "");
+  });
   const [spacingId, setSpacingId] = useState<string>("");
   const [mode, setMode] = useState<Mode>("auto");
   const [data, setData] = useState<ReportData | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get("edit");
+    if (editId) {
+      const reports = JSON.parse(localStorage.getItem("reports") || "[]") as ReportData[];
+      const existing = reports.find((r) => r.id === editId);
+      if (existing) {
+        setData(existing);
+        setStep("edit");
+        setMode("manual");
+        setIsEditing(true);
+      }
+    }
+  }, []);
 
   // Choose-Preset extra fields
   const [dateOfMfg, setDateOfMfg] = useState<string>(todayIso());
@@ -59,6 +82,10 @@ export default function NewReport() {
   const [batchTouched, setBatchTouched] = useState(false);
   const [mcNo, setMcNo] = useState<string>("");
   const [qty, setQty] = useState<number>(0);
+  const [reportType, setReportType] = useState<"Daily" | "Weekly">("Daily");
+  const [cbcPerformed, setCbcPerformed] = useState<boolean>(false);
+  const [isManualDischarge, setIsManualDischarge] = useState<boolean>(false);
+  const [manualDischargeText, setManualDischargeText] = useState<string>("");
 
   const preset = presets.find((p) => p.id === presetId) ?? null;
 
@@ -77,13 +104,18 @@ export default function NewReport() {
     batchNo,
     mcNo,
     qtyOfProduction: qty > 0 ? `${qty} Coil X 500 Mtr` : "",
+    reportType,
+    cbcPerformed,
   };
 
   useEffect(() => {
     if (step === "edit" && preset) {
+      const manualValues = isManualDischarge 
+        ? manualDischargeText.split(/[\s,]+/).map(v => parseFloat(v)).filter(v => !isNaN(v))
+        : undefined;
       setData(
         mode === "auto"
-          ? generateRandomReport(preset, spacingId, overrides)
+          ? generateRandomReport(preset, spacingId, overrides, manualValues)
           : emptyReport(preset, spacingId, overrides),
       );
     }
@@ -93,7 +125,6 @@ export default function NewReport() {
   if (presets.length === 0) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
         <div className="max-w-2xl mx-auto px-6 py-12">
           <Card className="p-8 text-center">
             <h2 className="text-xl font-bold mb-2">No presets yet</h2>
@@ -110,10 +141,107 @@ export default function NewReport() {
   const requiredOk =
     presetId && spacingId && dateOfMfg && dateOfTest && batchNo.trim() && mcNo.trim() && qty > 0;
 
+  if (step === "initial") {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="max-w-xl mx-auto px-6 py-16">
+          <h2 className="text-3xl font-bold mb-2">New Test Report</h2>
+          <p className="text-muted-foreground mb-8">Let's start with basic configuration.</p>
+          <Card className="p-8 space-y-6">
+            <div className="space-y-4">
+              <div>
+                <Label className="text-base font-semibold mb-2 block">Report Frequency</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button 
+                    variant={reportType === "Daily" ? "default" : "outline"}
+                    className="h-16 text-lg"
+                    onClick={() => setReportType("Daily")}
+                  >
+                    Daily
+                  </Button>
+                  <Button 
+                    variant={reportType === "Weekly" ? "default" : "outline"}
+                    className="h-16 text-lg"
+                    onClick={() => setReportType("Weekly")}
+                  >
+                    Weekly
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-base font-semibold mb-2 block">CBC Performed? (Carbon Black Content)</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button 
+                    variant={cbcPerformed ? "default" : "outline"}
+                    className="h-16 text-lg"
+                    onClick={() => setCbcPerformed(true)}
+                  >
+                    Yes
+                  </Button>
+                  <Button 
+                    variant={!cbcPerformed ? "default" : "outline"}
+                    className="h-16 text-lg"
+                    onClick={() => setCbcPerformed(false)}
+                  >
+                    No
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-base font-semibold mb-2 block">Discharge Generation Mode</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button 
+                    variant={!isManualDischarge ? "default" : "outline"}
+                    className="h-16 text-lg"
+                    onClick={() => setIsManualDischarge(false)}
+                  >
+                    Automatic (Magic)
+                  </Button>
+                  <Button 
+                    variant={isManualDischarge ? "default" : "outline"}
+                    className="h-16 text-lg"
+                    onClick={() => setIsManualDischarge(true)}
+                  >
+                    Manual Paste (Excel)
+                  </Button>
+                </div>
+              </div>
+
+              {isManualDischarge && (
+                <div>
+                  <Label className="text-base font-semibold mb-2 block">Paste 25 Discharge Values (LPH)</Label>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Paste 25 values separated by commas, spaces, or newlines. These will be used for the 1.0 kg nominal pressure table and uniformity calculations.
+                  </p>
+                  <textarea
+                    className="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="e.g. 2.05, 2.01, 1.98..."
+                    value={manualDischargeText}
+                    onChange={(e) => setManualDischargeText(e.target.value)}
+                  />
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Detected values: {manualDischargeText.split(/[\s,]+/).filter(v => v.trim() !== "" && !isNaN(parseFloat(v))).length} / 25
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4">
+              <Button className="w-full h-12 text-lg" onClick={() => setStep("preset")}>
+                Proceed to Select Preset
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   if (step === "preset") {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
         <div className="max-w-3xl mx-auto px-6 py-10">
           <h2 className="text-2xl font-bold mb-1">Choose Preset</h2>
           <p className="text-muted-foreground mb-6">All fields below are required to create a report.</p>
@@ -134,7 +262,7 @@ export default function NewReport() {
                 <div className="grid grid-cols-2 gap-3 text-sm border rounded-md p-3 bg-muted/30">
                   <div><span className="text-muted-foreground">Size:</span> <strong>{preset.size}</strong></div>
                   <div><span className="text-muted-foreground">Class:</span> <strong>{preset.className}</strong></div>
-                  <div><span className="text-muted-foreground">Discharge:</span> <strong>{preset.discharge} LPH</strong></div>
+                  <div><span className="text-muted-foreground">Discharge:</span> <strong>{(preset.discharge || 0).toFixed(2)} LPH</strong></div>
                   <div><span className="text-muted-foreground">Category:</span> <strong>{preset.category}</strong></div>
                 </div>
                 <div>
@@ -144,7 +272,7 @@ export default function NewReport() {
                     <SelectContent>
                       {preset.spacings.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
-                          {s.value} cm  ({s.min}–{s.max} cm)
+                          {s.value.toFixed(2)} cm  ({s.min.toFixed(2)}–{s.max.toFixed(2)} cm)
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -204,6 +332,8 @@ export default function NewReport() {
                   <span className="text-sm font-medium">Coil X 500 Mtr</span>
                 </div>
               </div>
+              
+              {/* Moved to Step 1 */}
             </div>
 
             <div className="pt-2 flex justify-end">
@@ -220,7 +350,6 @@ export default function NewReport() {
   if (step === "mode") {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
         <div className="max-w-3xl mx-auto px-6 py-12">
           <Button variant="ghost" size="sm" className="mb-4" onClick={() => setStep("preset")}>
             <ArrowLeft className="w-4 h-4 mr-1" /> Change preset
@@ -230,17 +359,28 @@ export default function NewReport() {
           <div className="grid md:grid-cols-2 gap-6">
             <Card
               className="p-6 cursor-pointer hover-elevate active-elevate-2"
-              onClick={() => { setMode("auto"); setStep("edit"); }}
+              onClick={() => {
+                setMode("auto");
+                const manualValues = isManualDischarge 
+                  ? manualDischargeText.split(/[\s,]+/).map(v => parseFloat(v)).filter(v => !isNaN(v))
+                  : undefined;
+                setData(generateRandomReport(preset!, spacingId, overrides, manualValues));
+                setStep("edit");
+              }}
             >
               <div className="w-12 h-12 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center mb-4">
                 <Wand2 className="w-6 h-6" />
               </div>
-              <h3 className="text-lg font-semibold mb-1">Auto-fill (Random)</h3>
+              <h3 className="text-lg font-semibold mb-1">Auto-fill (Magic)</h3>
               <p className="text-sm text-muted-foreground">Random values generated using preset limits.</p>
             </Card>
             <Card
               className="p-6 cursor-pointer hover-elevate active-elevate-2"
-              onClick={() => { setMode("manual"); setStep("edit"); }}
+              onClick={() => { 
+                setMode("manual");
+                setData(emptyReport(preset!, spacingId, overrides));
+                setStep("edit");
+              }}
             >
               <div className="w-12 h-12 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center mb-4">
                 <Pencil className="w-6 h-6" />
@@ -257,30 +397,93 @@ export default function NewReport() {
   if (!data || !preset) return null;
 
   if (showPreview) {
+    const filename = `${data.basicInfo.mcNo}_${data.basicInfo.batchNo}`.replace(/[\/\\?%*:|"<>]/g, '-');
+    
+    const handlePrint = () => {
+      const oldTitle = document.title;
+      document.title = filename;
+      window.print();
+      document.title = oldTitle;
+    };
+
+    const handleExport = async () => {
+      if (isExporting) return;
+      setIsExporting(true);
+      
+      // Wait for React to render all pages by passing isExporting=true to ReportTemplate
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      try {
+        const pages = document.querySelectorAll(".print-area .report-page");
+        if (pages.length === 0) throw new Error("No pages found");
+        
+        // @ts-ignore
+        const jsPDFLib = window.jspdf?.jsPDF || window.jsPDF;
+        // @ts-ignore
+        const html2canvasLib = window.html2canvas;
+        
+        if (!jsPDFLib || !html2canvasLib) throw new Error("PDF libraries not loaded");
+        
+        const pdf = new jsPDFLib('p', 'mm', [210, 294.1]);
+        
+        for (let i = 0; i < pages.length; i++) {
+          const canvas = await html2canvasLib(pages[i], {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            scrollY: 0,
+            scrollX: 0,
+            logging: false
+          });
+          
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          if (i > 0) pdf.addPage([210, 294.1], 'p');
+          pdf.addImage(imgData, 'JPEG', 0, 0, 210, 294.1);
+        }
+        
+        pdf.save(`${filename}.pdf`);
+      } catch (err) {
+        console.error("Export failed:", err);
+        alert("Failed to generate PDF. Please try again.");
+      } finally {
+        setIsExporting(false);
+      }
+    };
+
     return (
-      <div className="min-h-screen bg-gray-100">
-        <div className="no-print sticky top-0 z-10 bg-white border-b px-6 py-3 flex gap-2 items-center justify-between">
-          <Button variant="outline" onClick={() => setShowPreview(false)}>
-            <ArrowLeft className="w-4 h-4 mr-1" />
-            Back to edit
-          </Button>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => window.print()}>
-              Print / Export PDF
+      <div className="min-h-screen bg-slate-100/50">
+        <HeaderActions>
+          <div className="flex items-center gap-2 pr-4 border-r mr-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowPreview(false)}>
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Edit
             </Button>
-            <Button
-              onClick={() => {
-                saveReport(data);
-                navigate("/saved");
-              }}
-            >
-              <Save className="w-4 h-4 mr-1" />
-              Save Report
-            </Button>
+            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+              Preview
+            </span>
           </div>
-        </div>
-        <div className="py-4">
-          <ReportTemplate data={data} />
+          <Button variant="outline" size="sm" onClick={handlePrint}>
+            <Printer className="w-4 h-4 mr-1" />
+            Print
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={isExporting}>
+            <Download className="w-4 h-4 mr-1" />
+            {isExporting ? 'Generating...' : 'PDF'}
+          </Button>
+          <Button
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-700"
+            onClick={() => {
+              saveReport(data);
+              navigate("/saved");
+            }}
+          >
+            <Save className="w-4 h-4 mr-1" />
+            Save
+          </Button>
+        </HeaderActions>
+        <div className="py-8">
+          <ReportTemplate data={data} isExporting={isExporting} />
         </div>
       </div>
     );
@@ -288,7 +491,6 @@ export default function NewReport() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -336,18 +538,7 @@ export default function NewReport() {
   );
 }
 
-function Header() {
-  const [, navigate] = useLocation();
-  return (
-    <div className="border-b bg-white px-6 py-3 flex items-center gap-3">
-      <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
-        <ArrowLeft className="w-4 h-4 mr-1" />
-        Home
-      </Button>
-      <span className="font-semibold">New Test Report</span>
-    </div>
-  );
-}
+
 
 function field(label: string, child: React.ReactNode) {
   return (
@@ -396,6 +587,19 @@ function BasicForm({ data, setData, preset }: { data: ReportData; setData: (r: R
         {field("Qty of Production", <Input value={b.qtyOfProduction} onChange={(e) => upd("qtyOfProduction", e.target.value)} />)}
         {field("Category", <Input value={b.category} onChange={(e) => upd("category", e.target.value)} />)}
         {field("M/C No", <Input value={b.mcNo} onChange={(e) => upd("mcNo", e.target.value)} />)}
+        {field(
+          "Report Frequency",
+          <Select
+            value={b.reportType}
+            onValueChange={(v: "Daily" | "Weekly") => upd("reportType", v)}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Daily">Daily</SelectItem>
+              <SelectItem value="Weekly">Weekly</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
       </div>
     </Card>
   );

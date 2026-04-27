@@ -33,15 +33,18 @@ export function calcUniformity(emissionRates: number[], declared: number): Unifo
   // ml in 360 sec = LPH * 100 (as 1 LPH for 6 min = 100 ml)... but format shows small "Discharge in 360 Sec. (ML)" e.g. 0 in template. We'll compute realistically: ml = LPH/60 * 6 * 1000 = LPH * 100.
   const xs = emissionRates.slice();
   const meanX = avg(xs);
-  const sorted = xs.slice().sort((a, b) => a - b);
+  const withIndices = xs.map((v, i) => ({ v, i: i + 1 }));
+  const sorted = [...withIndices].sort((a, b) => a.v - b.v);
+  
   const rows: UniformityCalcRow[] = xs.map((x, i) => {
-    const ascValue = sorted[i] ?? 0;
+    const sortedItem = sorted[i];
+    const ascValue = sortedItem?.v ?? 0;
     return {
       no: i + 1,
       discharge360sec: Math.round(x * 100),
       dischargeLph: x,
       meanRateQ1: meanX,
-      ascNo: i + 1,
+      ascNo: sortedItem?.i ?? 0,
       ascValue,
       xMinusX1: ascValue - meanX,
       xMinusX1Sq: Math.pow(ascValue - meanX, 2),
@@ -87,7 +90,7 @@ export function calcExponent(pressureRows: { pressure: number; readings: number[
   const rows: ExponentRow[] = pressureRows.map((pr, i) => {
     const pi_kg = pr.pressure;
     const pi_kpa = pi_kg * 98.0665;
-    const qi = avg(pr.readings);
+    const qi = avg(pr.readings) / 100; // readings are stored as ml (LPH × 100); convert to LPH
     const logPi = pi_kpa > 0 ? Math.log10(pi_kpa) : 0;
     const logQi = qi > 0 ? Math.log10(qi) : 0;
     return {
