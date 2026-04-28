@@ -856,8 +856,8 @@ function Page4({ data }: { data: ReportData }) {
         <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
           <span style={{ fontStyle: "italic", fontWeight: "bold", marginRight: 6 }}>m = </span>
           <div style={{ display: "inline-block", textAlign: "center" }}>
-            <div style={{ borderBottom: "1px solid black", padding: "0 4px" }}>Σ (log pi)(log qi) − 1/n (Σ log pi)(Σ log qi)</div>
-            <div style={{ padding: "0 4px" }}>Σ (log pi)² − 1/n (Σ log pi)²</div>
+            <div style={{ borderBottom: "1px solid black", padding: "0 4px 6px 4px" }}>Σ (log pi)(log qi) − 1/n (Σ log pi)(Σ log qi)</div>
+            <div style={{ padding: "6px 4px 0 4px" }}>Σ (log pi)² − 1/n (Σ log pi)²</div>
           </div>
         </div>
         <div style={{ marginBottom: 2 }}>Where</div>
@@ -910,24 +910,24 @@ function Page4({ data }: { data: ReportData }) {
         <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontWeight: "bold", marginRight: 6 }}>m = </span>
           <div style={{ display: "inline-block", textAlign: "center" }}>
-            <div style={{ borderBottom: "1px solid black", padding: "0 4px" }}>Σ (log pi)(log qi) − 1/n (Σ log pi)(Σ log qi)</div>
-            <div style={{ padding: "0 4px" }}>Σ (log pi)² − 1/n (Σ log pi)²</div>
+            <div style={{ borderBottom: "1px solid black", padding: "0 4px 6px 4px" }}>Σ (log pi)(log qi) − 1/n (Σ log pi)(Σ log qi)</div>
+            <div style={{ padding: "6px 4px 0 4px" }}>Σ (log pi)² − 1/n (Σ log pi)²</div>
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontWeight: "bold", marginRight: 6 }}>m = </span>
           <div style={{ display: "inline-block", textAlign: "center" }}>
-            <div style={{ borderBottom: "1px solid black", padding: "0 4px" }}>{fmt(exp.sumLogPiLogQi, 4)} − 0.25 ({fmt(exp.sumLogPi, 4)}) ({fmt(exp.sumLogQi, 4)})</div>
-            <div style={{ padding: "0 4px" }}>{fmt(exp.sumLogPiSq, 4)} − 0.25 ({fmt(exp.sumLogPi, 4)})²</div>
+            <div style={{ borderBottom: "1px solid black", padding: "0 4px 6px 4px" }}>{fmt(exp.sumLogPiLogQi, 4)} − 0.25 ({fmt(exp.sumLogPi, 4)}) ({fmt(exp.sumLogQi, 4)})</div>
+            <div style={{ padding: "6px 4px 0 4px" }}>{fmt(exp.sumLogPiSq, 4)} − 0.25 ({fmt(exp.sumLogPi, 4)})²</div>
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontWeight: "bold", marginRight: 6 }}>m = </span>
           <div style={{ display: "inline-block", textAlign: "center" }}>
-            <div style={{ borderBottom: "1px solid black", padding: "0 4px" }}>{fmt(exp.sumLogPiLogQi - 0.25 * exp.sumLogPi * exp.sumLogQi, 4)}</div>
-            <div style={{ padding: "0 4px" }}>{fmt(exp.sumLogPiSq - 0.25 * exp.sumLogPi * exp.sumLogPi, 4)}</div>
+            <div style={{ borderBottom: "1px solid black", padding: "0 4px 6px 4px" }}>{fmt(exp.sumLogPiLogQi - 0.25 * exp.sumLogPi * exp.sumLogQi, 4)}</div>
+            <div style={{ padding: "6px 4px 0 4px" }}>{fmt(exp.sumLogPiSq - 0.25 * exp.sumLogPi * exp.sumLogPi, 4)}</div>
           </div>
         </div>
 
