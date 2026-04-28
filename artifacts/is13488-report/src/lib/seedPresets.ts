@@ -1180,7 +1180,7 @@ export const defaultPresets: Preset[] = [
   {
     "id": "276d43af-c0dd-446e-a0a7-00ab734c33db",
     "name": "16 mm, Class - 2, 3.40 LPH",
-    "size": "12 mm",
+    "size": "16 mm",
     "className": "2",
     "category": "B, Unregulated",
     "discharge": 3.4,
@@ -1189,7 +1189,7 @@ export const defaultPresets: Preset[] = [
       "min": 0.8,
       "max": 1
     },
-    "specimenLength": 240,
+    "specimenLength": 320,
     "lengthBeforeTest": 150,
     "appliedLoad": 120,
     "carbonCrucibleWeight": {
@@ -1230,29 +1230,29 @@ export const defaultPresets: Preset[] = [
       "max": 2.6
     },
     "insideDiameter": {
-      "value": 10.53,
-      "min": 10.53,
-      "max": 10.66
+      "value": 14.23,
+      "min": 14.23,
+      "max": 14.35
     },
     "wallThickness": {
-      "value": 0.6,
-      "min": 0.6,
-      "max": 0.7
+      "value": 0.73,
+      "min": 0.73,
+      "max": 0.85
     },
     "declaredDischargePerPressure": [
       {
         "pressure": 0.5,
-        "discharge": 2.55,
-        "min": 2.3,
-        "max": 2.81,
-        "r3Min": 233,
-        "r3Max": 238,
+        "discharge": 2.50,
+        "min": 2.25,
+        "max": 2.75,
+        "r3Min": 225,
+        "r3Max": 235,
         "r12Min": 245,
-        "r12Max": 255,
+        "r12Max": 248,
         "r13Min": 245,
-        "r13Max": 255,
-        "r23Min": 261,
-        "r23Max": 278
+        "r13Max": 251,
+        "r23Min": 258,
+        "r23Max": 275
       },
       {
         "pressure": 1,
@@ -1270,11 +1270,11 @@ export const defaultPresets: Preset[] = [
       },
       {
         "pressure": 1.5,
-        "discharge": 4.25,
-        "min": 3.83,
-        "max": 4.68,
-        "r3Min": 385,
-        "r3Max": 396,
+        "discharge": 4.20,
+        "min": 3.78,
+        "max": 4.62,
+        "r3Min": 378,
+        "r3Max": 390,
         "r12Min": 410,
         "r12Max": 418,
         "r13Min": 410,
@@ -1284,11 +1284,11 @@ export const defaultPresets: Preset[] = [
       },
       {
         "pressure": 1.8,
-        "discharge": 4.7,
-        "min": 4.23,
-        "max": 5.17,
-        "r3Min": 426,
-        "r3Max": 440,
+        "discharge": 4.65,
+        "min": 4.19,
+        "max": 5.12,
+        "r3Min": 421,
+        "r3Max": 435,
         "r12Min": 455,
         "r12Max": 468,
         "r13Min": 455,
