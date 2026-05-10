@@ -73,9 +73,11 @@ function SectionBar({ srNo, defaultText, data, value, className = "section-bar m
   
   // Add 1px thin border to main headers (srNo 1 to 15)
   const isMainHeader = /^\d+$/.test(srNo) && parseInt(srNo) >= 1 && parseInt(srNo) <= 15;
+  const isSpecialBorder = srNo === "2" || srNo === "15";
+  
   const style = isMainHeader ? { 
     borderTop: "1px solid black", 
-    borderBottom: "none", 
+    borderBottom: isSpecialBorder ? "1px solid black" : "none", 
     paddingTop: "0px",
     paddingBottom: "9.5px",
     lineHeight: "1.2",
@@ -342,15 +344,16 @@ function Page1({ data }: { data: ReportData }) {
       <table className="report-table">
         <tbody>
           <tr>
-            <td>Condition in air circulating oven : 80± 1°C</td>
+            <td colSpan={2}>Condition in air circulating oven : 80± 1°C</td>
             <td colSpan={2}>Duration : 1 hr</td>
+            <td colSpan={2} rowSpan={3}></td>
           </tr>
           <tr>
-            <td>Test Temperature : 77± 3°C</td>
+            <td colSpan={2}>Test Temperature : 77± 3°C</td>
             <td colSpan={2}>Test Duration : 1 hr</td>
           </tr>
           <tr>
-            <td>Reagent : 10 % Igepoal CO-630</td>
+            <td colSpan={2}>Reagent : 10 % Igepoal CO-630</td>
             <td colSpan={2}>Specimen Length : {data.basicInfo.specimenLength}</td>
           </tr>
           <tr>
@@ -421,9 +424,10 @@ function Page2({ data }: { data: ReportData }) {
       <table className="report-table">
         <thead>
           <tr>
-            <th colSpan={2}>Sample Size : 25 Emitting Units</th>
-            <th colSpan={2}>Test Temperature : 27 ± 3°C</th>
-            <th colSpan={2}>Test Duration : 6 minutes</th>
+            <th colSpan={3}>Sample Size : 25 Emitting Units</th>
+            <th colSpan={3}>Test Temperature : 27 ± 3°C</th>
+            <th colSpan={3}>Test Duration : 6 minutes</th>
+            <th colSpan={1}></th>
           </tr>
           <tr>
             {Array.from({ length: 5 }).map((_, c) => (
@@ -546,12 +550,13 @@ function Page3({ data }: { data: ReportData }) {
       <table className="report-table">
         <tbody>
           <tr>
-            <td>Test Temperature : 77± 3°C</td>
-            <td colSpan={4}>Test Duration : 48 hrs</td>
+            <td colSpan={2}>Test Temperature : 77± 3°C</td>
+            <td colSpan={2}>Test Duration : 48 hrs</td>
+            <td colSpan={2} rowSpan={2}></td>
           </tr>
           <tr>
-            <td>Reagent : 10 % Igepoal CO-630</td>
-            <td colSpan={4}>Specimen Length : {data.basicInfo.specimenLength}</td>
+            <td colSpan={2}>Reagent : 10 % Igepoal CO-630</td>
+            <td colSpan={2}>Specimen Length : {data.basicInfo.specimenLength}</td>
           </tr>
           <tr>
             <th style={{ width: "25%" }}>Sample No</th>
