@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Eye, Printer, Trash2, Pencil, Download, FileText } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { 
+  ArrowLeft, Eye, Printer, Trash2, Pencil, Download, FileText, 
+  CheckSquare, Square, Trash, Archive, X, CheckCircle2
+} from "lucide-react";
 import { getReports, deleteReport } from "@/lib/storage";
 import type { ReportData } from "@/lib/types";
 import { ReportTemplate } from "@/components/ReportTemplate";
 import { HeaderActions } from "@/components/HeaderActions";
+import JSZip from "jszip";
 
 export default function SavedReports() {
   const [, navigate] = useLocation();
@@ -15,55 +20,132 @@ export default function SavedReports() {
 
   const [downloadingReport, setDownloadingReport] = useState<ReportData | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  
+  // Batch selection state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === reports.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(reports.map(r => r.id));
+    }
+  };
+
+  const exportPDFBlob = async (r: ReportData): Promise<Blob> => {
+    setDownloadingReport(r);
+    // Give time for the hidden component to mount and charts to render
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    
+    try {
+      const container = document.getElementById('download-target');
+      if (!container) throw new Error("Container not found");
+      
+      const pages = container.querySelectorAll(".report-page");
+      if (pages.length === 0) throw new Error("No pages found");
+      
+      // @ts-ignore
+      const jsPDFLib = window.jspdf?.jsPDF || window.jsPDF;
+      // @ts-ignore
+      const html2canvasLib = window.html2canvas;
+      
+      if (!jsPDFLib || !html2canvasLib) throw new Error("PDF libraries not loaded");
+      
+      const pdf = new jsPDFLib('p', 'mm', [210, 294.1]);
+      
+      for (let i = 0; i < pages.length; i++) {
+        const canvas = await html2canvasLib(pages[i], {
+          scale: 2.5, // Slightly lower scale for batch to save memory
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          scrollY: 0,
+          scrollX: 0,
+          logging: false
+        });
+        
+        const imgData = canvas.toDataURL('image/jpeg', 0.9);
+        if (i > 0) pdf.addPage([210, 294.1], 'p');
+        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 294.1);
+      }
+      
+      return pdf.output('blob');
+    } finally {
+      setDownloadingReport(null);
+    }
+  };
 
   const exportPDF = async (r: ReportData) => {
     if (isExporting) return;
     setIsExporting(true);
-    setDownloadingReport(r);
+    try {
+      const blob = await exportPDFBlob(r);
+      const filename = `${r.basicInfo.mcNo}_${r.basicInfo.batchNo}`.replace(/[\/\\?%*:|"<>]/g, '-');
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${filename}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("Failed to generate PDF. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (confirm(`Delete ${selectedIds.length} selected reports? This action cannot be undone.`)) {
+      selectedIds.forEach(id => deleteReport(id));
+      const remaining = getReports();
+      setReports(remaining);
+      setSelectedIds([]);
+    }
+  };
+
+  const handleBatchDownload = async () => {
+    if (isBatchProcessing) return;
+    setIsBatchProcessing(true);
+    setBatchProgress({ current: 0, total: selectedIds.length });
     
-    // Give time for the hidden component to mount and charts to render
-    setTimeout(async () => {
-      try {
+    const zip = new JSZip();
+    const folder = zip.folder("IS13488_Reports");
+    
+    try {
+      for (let i = 0; i < selectedIds.length; i++) {
+        const id = selectedIds[i];
+        const r = reports.find(report => report.id === id);
+        if (!r) continue;
+        
+        setBatchProgress(prev => ({ ...prev, current: i + 1 }));
+        const blob = await exportPDFBlob(r);
         const filename = `${r.basicInfo.mcNo}_${r.basicInfo.batchNo}`.replace(/[\/\\?%*:|"<>]/g, '-');
-        const container = document.getElementById('download-target');
-        if (!container) throw new Error("Container not found");
-        
-        const pages = container.querySelectorAll(".report-page");
-        if (pages.length === 0) throw new Error("No pages found");
-        
-        // @ts-ignore
-        const jsPDFLib = window.jspdf?.jsPDF || window.jsPDF;
-        // @ts-ignore
-        const html2canvasLib = window.html2canvas;
-        
-        if (!jsPDFLib || !html2canvasLib) throw new Error("PDF libraries not loaded");
-        
-        const pdf = new jsPDFLib('p', 'mm', [210, 294.1]);
-        
-        for (let i = 0; i < pages.length; i++) {
-          const canvas = await html2canvasLib(pages[i], {
-            scale: 3,
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            scrollY: 0,
-            scrollX: 0,
-            logging: false
-          });
-          
-          const imgData = canvas.toDataURL('image/jpeg', 0.95);
-          if (i > 0) pdf.addPage([210, 294.1], 'p');
-          pdf.addImage(imgData, 'JPEG', 0, 0, 210, 294.1);
-        }
-        
-        pdf.save(`${filename}.pdf`);
-      } catch (err) {
-        console.error("Export failed:", err);
-        alert("Failed to generate PDF. Please try again.");
-      } finally {
-        setDownloadingReport(null);
-        setIsExporting(false);
+        folder?.file(`${filename}.pdf`, blob);
       }
-    }, 1500);
+      
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Reports_Batch_${new Date().getTime()}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setSelectedIds([]);
+    } catch (err) {
+      console.error("Batch export failed:", err);
+      alert("Batch export failed. Some reports might be missing.");
+    } finally {
+      setIsBatchProcessing(false);
+      setBatchProgress({ current: 0, total: 0 });
+    }
   };
 
   if (viewing) {
@@ -79,8 +161,6 @@ export default function SavedReports() {
     const handleExport = async () => {
       if (isExporting) return;
       setIsExporting(true);
-      
-      // Wait for React to render all pages by passing isExporting=true to ReportTemplate
       await new Promise(resolve => setTimeout(resolve, 300));
       
       try {
@@ -95,7 +175,6 @@ export default function SavedReports() {
         if (!jsPDFLib || !html2canvasLib) throw new Error("PDF libraries not loaded");
         
         const pdf = new jsPDFLib('p', 'mm', [210, 294.1]);
-        
         for (let i = 0; i < pages.length; i++) {
           const canvas = await html2canvasLib(pages[i], {
             scale: 3,
@@ -105,12 +184,10 @@ export default function SavedReports() {
             scrollX: 0,
             logging: false
           });
-          
           const imgData = canvas.toDataURL('image/jpeg', 0.95);
           if (i > 0) pdf.addPage([210, 294.1], 'p');
           pdf.addImage(imgData, 'JPEG', 0, 0, 210, 294.1);
         }
-        
         pdf.save(`${filename}.pdf`);
       } catch (err) {
         console.error("Export failed:", err);
@@ -149,7 +226,7 @@ export default function SavedReports() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-4xl">
+    <div className="container mx-auto py-8 px-4 max-w-4xl pb-32">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <div className="bg-emerald-600 p-2 rounded-lg text-white">
@@ -157,9 +234,22 @@ export default function SavedReports() {
           </div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Saved Reports</h1>
         </div>
-        <Button onClick={() => navigate("/")} variant="outline" size="sm">
-          Home
-        </Button>
+        <div className="flex gap-2">
+          {reports.length > 0 && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={toggleSelectAll}
+              className="text-slate-600"
+            >
+              {selectedIds.length === reports.length ? <CheckSquare className="w-4 h-4 mr-2" /> : <Square className="w-4 h-4 mr-2" />}
+              {selectedIds.length === reports.length ? "Deselect All" : "Select All"}
+            </Button>
+          )}
+          <Button onClick={() => navigate("/")} variant="outline" size="sm">
+            Home
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -176,8 +266,18 @@ export default function SavedReports() {
         ) : (
           <div className="space-y-3">
             {reports.map((r) => (
-              <Card key={r.id} className="p-4 hover:shadow-md transition-shadow flex items-center justify-between border-slate-200">
+              <Card 
+                key={r.id} 
+                className={`p-4 hover:shadow-md transition-all flex items-center justify-between border-slate-200 cursor-pointer ${selectedIds.includes(r.id) ? 'border-emerald-500 bg-emerald-50/30' : ''}`}
+                onClick={() => toggleSelect(r.id)}
+              >
                 <div className="flex items-center gap-4">
+                  <div 
+                    className="flex-shrink-0"
+                    onClick={(e) => { e.stopPropagation(); toggleSelect(r.id); }}
+                  >
+                    <Checkbox checked={selectedIds.includes(r.id)} onCheckedChange={() => toggleSelect(r.id)} />
+                  </div>
                   <div className="bg-slate-50 p-2 rounded-md border border-slate-100">
                     <FileText className="w-5 h-5 text-emerald-600" />
                   </div>
@@ -190,22 +290,20 @@ export default function SavedReports() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setViewing(r)}>
-                    <Eye className="w-4 h-4 mr-1" />
-                    View
+                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="icon" onClick={() => setViewing(r)} className="hover:bg-emerald-50 hover:text-emerald-600">
+                    <Eye className="w-4 h-4" />
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => exportPDF(r)} disabled={downloadingReport?.id === r.id}>
-                    <Download className={`w-4 h-4 mr-1 ${downloadingReport?.id === r.id ? "animate-bounce text-emerald-600" : ""}`} />
-                    {downloadingReport?.id === r.id ? "Downloading..." : "Download"}
+                  <Button variant="ghost" size="icon" onClick={() => exportPDF(r)} disabled={downloadingReport?.id === r.id} className="hover:bg-emerald-50 hover:text-emerald-600">
+                    <Download className={`w-4 h-4 ${downloadingReport?.id === r.id ? "animate-bounce text-emerald-600" : ""}`} />
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => navigate(`/new?edit=${r.id}`)}>
-                    <Pencil className="w-4 h-4 mr-1" />
-                    Edit
+                  <Button variant="ghost" size="icon" onClick={() => navigate(`/new?edit=${r.id}`)} className="hover:bg-blue-50 hover:text-blue-600">
+                    <Pencil className="w-4 h-4" />
                   </Button>
                   <Button
-                    variant="outline"
-                    size="sm"
+                    variant="ghost"
+                    size="icon"
+                    className="hover:bg-red-50 hover:text-red-600"
                     onClick={() => {
                       if (confirm("Delete this report?")) {
                         deleteReport(r.id);
@@ -213,7 +311,7 @@ export default function SavedReports() {
                       }
                     }}
                   >
-                    <Trash2 className="w-4 h-4 text-destructive" />
+                    <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               </Card>
@@ -221,6 +319,91 @@ export default function SavedReports() {
           </div>
         )}
       </div>
+
+      {/* Batch Actions Bar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-50">
+          <Card className="bg-slate-900 text-white p-4 shadow-2xl border-none flex items-center justify-between animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-center gap-4">
+              <div className="bg-emerald-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">
+                {selectedIds.length}
+              </div>
+              <div>
+                <p className="font-bold text-sm">Reports Selected</p>
+                <p className="text-xs text-slate-400">Perform bulk actions</p>
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-white hover:bg-slate-800"
+                onClick={() => setSelectedIds([])}
+                disabled={isBatchProcessing}
+              >
+                <X className="w-4 h-4 mr-2" /> Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                size="sm"
+                onClick={handleBatchDelete}
+                disabled={isBatchProcessing}
+              >
+                <Trash className="w-4 h-4 mr-2" /> Delete
+              </Button>
+              <Button 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white" 
+                size="sm"
+                onClick={handleBatchDownload}
+                disabled={isBatchProcessing}
+              >
+                {isBatchProcessing ? (
+                  <>
+                    <Download className="w-4 h-4 mr-2 animate-bounce" />
+                    {batchProgress.current}/{batchProgress.total}
+                  </>
+                ) : (
+                  <>
+                    <Archive className="w-4 h-4 mr-2" /> Download ZIP
+                  </>
+                )}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Processing Overlay */}
+      {isBatchProcessing && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-[60] flex items-center justify-center">
+          <Card className="p-8 max-w-sm w-full text-center">
+            <div className="relative w-24 h-24 mx-auto mb-6">
+              <svg className="w-full h-full" viewBox="0 0 100 100">
+                <circle className="text-slate-100 stroke-current" strokeWidth="8" fill="transparent" r="40" cx="50" cy="50" />
+                <circle 
+                  className="text-emerald-600 stroke-current transition-all duration-300" 
+                  strokeWidth="8" 
+                  strokeLinecap="round" 
+                  fill="transparent" 
+                  r="40" cx="50" cy="50"
+                  strokeDasharray="251.2"
+                  strokeDashoffset={251.2 - (251.2 * batchProgress.current) / batchProgress.total}
+                  transform="rotate(-90 50 50)"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center text-xl font-bold text-emerald-600">
+                {Math.round((batchProgress.current / batchProgress.total) * 100)}%
+              </div>
+            </div>
+            <h3 className="text-xl font-bold mb-2">Creating ZIP Archive</h3>
+            <p className="text-sm text-slate-500">
+              Generating PDF {batchProgress.current} of {batchProgress.total}.<br/>
+              This may take a moment...
+            </p>
+          </Card>
+        </div>
+      )}
 
       {/* Hidden container for direct downloads */}
       {downloadingReport && (
