@@ -71,15 +71,14 @@ function SectionBar({ srNo, defaultText, data, value, className = "section-bar m
     text = text.replace("{value}", displayValue);
   }
   
-  // Add black border to main headers (srNo 1 to 15)
+  // Add 1px thin border to main headers (srNo 1 to 15)
   const isMainHeader = /^\d+$/.test(srNo) && parseInt(srNo) >= 1 && parseInt(srNo) <= 15;
-  const isSpecial = srNo === "11" || srNo === "12";
   const style = isMainHeader ? { 
-    borderTop: "2px solid black", 
-    borderBottom: "2px solid black", 
-    paddingTop: isSpecial ? "2px" : "0px",
-    paddingBottom: isSpecial ? "2px" : "6px",
-    lineHeight: "1",
+    borderTop: "1px solid black", 
+    borderBottom: "none", 
+    paddingTop: "0px",
+    paddingBottom: "9.5px",
+    lineHeight: "1.2",
   } : {};
   
   return <div className={className} style={style}>{text}</div>;
@@ -704,7 +703,7 @@ function HydraulicSection({
 }) {
   return (
     <>
-      <div className="section-bar mt-1">{n}. {title} :</div>
+      <SectionBar srNo={String(n)} defaultText={`${n}. ${title} :`} data={data} />
       <table className="report-table">
         <tbody>
           {intro.map((line, i) => (
