@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,6 +25,14 @@ export default function SavedReports() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+ 
+  useEffect(() => {
+    const handleSync = () => {
+      setReports(getReports());
+    };
+    window.addEventListener('cloud-sync-complete', handleSync);
+    return () => window.removeEventListener('cloud-sync-complete', handleSync);
+  }, []);
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => 

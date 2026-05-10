@@ -140,6 +140,15 @@ function PresetsTab() {
   const [confirmDel, setConfirmDel] = useState<Preset | null>(null);
   const [defaultId, setDefaultId] = useState<string>(getDefaultPresetId());
 
+  useEffect(() => {
+    const handleSync = () => {
+      setPresets(getPresets());
+      setDefaultId(getDefaultPresetId());
+    };
+    window.addEventListener('cloud-sync-complete', handleSync);
+    return () => window.removeEventListener('cloud-sync-complete', handleSync);
+  }, []);
+
   const refresh = () => setPresets(getPresets());
 
   const handleReset = () => {
@@ -765,6 +774,14 @@ function PresetEditor({
 // ===================== STANDARD SPECS =====================
 function SpecsTab() {
   const [specs, setSpecs] = useState<StandardSpec[]>(getSpecs());
+  
+  useEffect(() => {
+    const handleSync = () => {
+      setSpecs(getSpecs());
+    };
+    window.addEventListener('cloud-sync-complete', handleSync);
+    return () => window.removeEventListener('cloud-sync-complete', handleSync);
+  }, []);
 
   const refresh = () => setSpecs(getSpecs());
 

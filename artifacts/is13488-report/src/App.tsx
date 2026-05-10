@@ -45,6 +45,8 @@ function CloudSync() {
           syncHeadersFromCloud()
         ]);
         console.log("Cloud sync complete.");
+        // Signal the UI to refresh
+        window.dispatchEvent(new CustomEvent('cloud-sync-complete'));
       } catch (e) {
         console.error("Cloud sync failed:", e);
       }
