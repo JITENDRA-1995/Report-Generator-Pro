@@ -14,7 +14,7 @@ import {
   LabelList,
 } from "recharts";
 
-import { useState } from "react";
+import { useState, CSSProperties } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export function ReportTemplate({ data, isExporting = false }: { data: ReportData, isExporting?: boolean }) {
@@ -75,7 +75,7 @@ function SectionBar({ srNo, defaultText, data, value, className = "section-bar m
   const isMainHeader = /^\d+$/.test(srNo) && parseInt(srNo) >= 1 && parseInt(srNo) <= 15;
   const isSpecialBorder = srNo === "2" || srNo === "4" || srNo === "15";
   
-  const style = isMainHeader ? { 
+  const style: CSSProperties = isMainHeader ? { 
     borderTop: "1px solid black", 
     borderBottom: isSpecialBorder ? "1px solid black" : "none", 
     paddingTop: "0px",
@@ -872,7 +872,7 @@ function Page4({ data }: { data: ReportData }) {
         borderLeft: "1px solid black", 
         borderRight: "1px solid black", 
         boxSizing: "border-box" 
-      }}>
+      } as CSSProperties}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
           <span style={{ fontStyle: "italic", fontSize: 16, marginRight: 8 }}>q&#x0304; = K · p<sup>m</sup></span>
         </div>
@@ -939,7 +939,7 @@ function Page4({ data }: { data: ReportData }) {
         borderBottom: "1px solid black", 
         boxSizing: "border-box",
         marginBottom: "8px"
-      }}>
+      } as CSSProperties}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontWeight: "bold", marginRight: 6 }}>m = </span>
           <div style={{ display: "inline-block", textAlign: "center" }}>
