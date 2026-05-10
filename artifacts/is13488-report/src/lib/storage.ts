@@ -40,7 +40,11 @@ export function saveReport(r: ReportData): void {
   localStorage.setItem(REPORTS_KEY, JSON.stringify(all));
 
   // Sync to Cloud (Background)
-  supabase.from('reports').upsert({ id: r.id, data: r }).then();
+  supabase.from('reports').upsert({ id: r.id, data: r }, { onConflict: 'id' })
+    .then(res => {
+      if (res.error) console.error("Cloud Save Error (Reports):", res.error);
+      else console.log("Cloud Sync Success (Report saved)");
+    });
 }
 
 export function deleteReport(id: string): void {
@@ -48,7 +52,10 @@ export function deleteReport(id: string): void {
   localStorage.setItem(REPORTS_KEY, JSON.stringify(all));
   
   // Sync to Cloud (Background)
-  supabase.from('reports').delete().eq('id', id).then();
+  supabase.from('reports').delete().eq('id', id)
+    .then(res => {
+      if (res.error) console.error("Cloud Delete Error (Reports):", res.error);
+    });
 }
 
 export async function syncReportsFromCloud(): Promise<void> {
@@ -98,7 +105,10 @@ export function upsertPreset(p: Preset): void {
   savePresets(all);
  
   // Sync to Cloud
-  supabase.from('presets').upsert({ id: p.id, name: p.name, data: p, is_imported: p.isImported }).then();
+  supabase.from('presets').upsert({ id: p.id, name: p.name, data: p, is_imported: p.isImported }, { onConflict: 'id' })
+    .then(res => {
+      if (res.error) console.error("Cloud Save Error (Presets):", res.error);
+    });
 }
 
 export function deletePreset(id: string): void {
@@ -200,7 +210,10 @@ export function upsertSpec(s: StandardSpec): void {
   saveSpecs(all);
  
   // Sync to Cloud
-  supabase.from('standard_specs').upsert({ id: s.id, data: s, is_imported: s.isImported }).then();
+  supabase.from('standard_specs').upsert({ id: s.id, data: s, is_imported: s.isImported }, { onConflict: 'id' })
+    .then(res => {
+      if (res.error) console.error("Cloud Save Error (Specs):", res.error);
+    });
 }
  
 export function deleteSpec(id: string): void {
