@@ -572,6 +572,7 @@ function Page3({ data }: { data: ReportData }) {
 
       <HydraulicSection
         n={11}
+        data={data}
         title="Resistance to Hydraulic Pressure at Ambient Temp. (CL 8.4.1 IS - 13488 : 2008)"
         intro={[
           "Sample : 5 emitting units joined together by center fitting",
@@ -589,6 +590,7 @@ function Page3({ data }: { data: ReportData }) {
 
       <HydraulicSection
         n={12}
+        data={data}
         title="Resistance to Hydraulic Pressure at Elevated Temp. (CL 8.4.2 IS - 13488 : 2008)"
         intro={[
           "Sample : 5 emitting units joined together by center fitting",
@@ -686,6 +688,7 @@ function Page3({ data }: { data: ReportData }) {
 
 function HydraulicSection({
   n,
+  data,
   title,
   intro,
   before,
@@ -694,6 +697,7 @@ function HydraulicSection({
   spec,
 }: {
   n: number;
+  data: ReportData;
   title: string;
   intro: string[];
   before: number[];
