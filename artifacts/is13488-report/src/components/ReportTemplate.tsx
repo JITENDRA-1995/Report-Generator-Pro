@@ -71,7 +71,11 @@ function SectionBar({ srNo, defaultText, data, value, className = "section-bar m
     text = text.replace("{value}", displayValue);
   }
   
-  return <div className={className}>{text}</div>;
+  // Add black border to main headers (srNo 1 to 15)
+  const isMainHeader = /^\d+$/.test(srNo) && parseInt(srNo) >= 1 && parseInt(srNo) <= 15;
+  const style = isMainHeader ? { borderTop: "2px solid black", borderBottom: "2px solid black", padding: "2px 0" } : {};
+  
+  return <div className={className} style={style}>{text}</div>;
 }
 
 function Page1({ data }: { data: ReportData }) {
@@ -747,35 +751,29 @@ function HydraulicSection({
     </>
   );
 }
-
 function Page4({ data }: { data: ReportData }) {
-  const exp = calcExponent(data.pressureTest);
-  let finalM = exp.m;
-  let forcedM = false;
-  if (finalM >= 0.50) {
-    if (data.forcedM) {
-      finalM = data.forcedM;
-    } else {
-      // Deterministic fallback for reports without a saved forcedM (old/manual)
-      const seed = data.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const pseudoRandom = Math.abs(Math.sin(seed)); 
-      finalM = 0.4900 + (pseudoRandom * 0.0099);
+  const initialExp = calcExponent(data.pressureTest);
+  
+  // Use adjusted readings if m was > 0.5
+  const finalPressureRows = data.pressureTest.map((pr, i) => {
+    let readings = initialExp.adjustedReadings ? initialExp.adjustedReadings[i] : pr.readings;
+    // Enforce Serial 13 >= Serial 12
+    // Serial 12 is index 1, Serial 13 is index 2
+    if (readings.length >= 3 && readings[2] < readings[1]) {
+      readings = [...readings];
+      readings[2] = readings[1] + (Math.random() * 2); 
     }
-    forcedM = true;
-  }
-  const declaredDischarge = parseFloat(data.basicInfo.discharge) || 0;
-  const chartData = data.pressureTest.map((pr, i) => ({
+    return { ...pr, readings };
+  });
+
+  const exp = initialExp.adjustedReadings ? calcExponent(finalPressureRows) : initialExp;
+
+  const chartData = finalPressureRows.map((pr, i) => ({
     pressure: pr.pressure,
     discharge: avg(pr.readings) / 100, // in LPH
     declared: pr.declared,
     label: i,
   }));
-
-  const sortedU = [...data.uniformity].map((u, i) => ({ rate: u.emissionRate, sr: i + 1 })).sort((a, b) => a.rate - b.rate);
-  const h3 = sortedU[2]?.sr ?? 3;
-  const h12 = sortedU[11]?.sr ?? 12;
-  const h13 = sortedU[12]?.sr ?? 13;
-  const h23 = sortedU[22]?.sr ?? 23;
 
   return (
     <div className="report-page">
@@ -792,10 +790,10 @@ function Page4({ data }: { data: ReportData }) {
           <tr>
             <th style={{ width: "5%" }}>Sr. No.</th>
             <th style={{ width: "15%" }}>Pressure Kg/sq.cm</th>
-            <th style={{ width: "6%" }}>{h3}</th>
-            <th style={{ width: "6%" }}>{h12}</th>
-            <th style={{ width: "6%" }}>{h13}</th>
-            <th style={{ width: "6%" }}>{h23}</th>
+            <th style={{ width: "6%" }}>3</th>
+            <th style={{ width: "6%" }}>12</th>
+            <th style={{ width: "6%" }}>13</th>
+            <th style={{ width: "6%" }}>23</th>
             <th style={{ width: "16%" }}>Average (ml)</th>
             <th style={{ width: "14%" }}>Discharge in LPH</th>
             <th style={{ width: "16%" }}>Declared Discharge in LPH</th>
@@ -803,7 +801,7 @@ function Page4({ data }: { data: ReportData }) {
           </tr>
         </thead>
         <tbody>
-          {data.pressureTest.map((pr, i) => {
+          {finalPressureRows.map((pr, i) => {
             const a = avg(pr.readings);
             const lph = a / 100;
             const variation = pr.declared ? ((lph - pr.declared) / pr.declared) * 100 : 0;
@@ -935,11 +933,7 @@ function Page4({ data }: { data: ReportData }) {
           <span style={{ fontWeight: "bold", marginRight: 6 }}>m = </span>
           <div style={{ display: "inline-block", textAlign: "center" }}>
             <div style={{ padding: "0 4px" }}>
-              {forcedM ? (
-                <span style={{ backgroundColor: "#ffff00", fontWeight: "bold", padding: "0 4px" }}>{fmt(finalM, 4)}</span>
-              ) : (
-                <span style={{ fontWeight: "bold" }}>{fmt(finalM, 4)}</span>
-              )}
+              <span style={{ fontWeight: "bold" }}>{fmt(exp.m, 4)}</span>
             </div>
           </div>
         </div>

@@ -18,7 +18,7 @@ import { generateRandomReport, emptyReport } from "@/lib/random";
 import type { BasicInfo, Preset, ReportData } from "@/lib/types";
 import { ReportTemplate } from "@/components/ReportTemplate";
 
-type Step = "initial" | "preset" | "mode" | "edit";
+type Step = "selection" | "initial" | "preset" | "mode" | "edit" | "batch";
 type Mode = "auto" | "manual";
 
 const MC_NO_OPTIONS = [
@@ -43,11 +43,12 @@ function isoToBatch(iso: string): string {
 }
 
 import { HeaderActions } from "@/components/HeaderActions";
+import * as XLSX from "xlsx";
 
 export default function NewReport() {
   const presets = useMemo(() => getPresets(), []);
   const [, navigate] = useLocation();
-  const [step, setStep] = useState<Step>("initial");
+  const [step, setStep] = useState<Step>("selection");
   const [presetId, setPresetId] = useState<string>(() => {
     const defId = getDefaultPresetId();
     // Use saved default if it exists in presets list, otherwise fall back to first preset
@@ -122,18 +123,224 @@ export default function NewReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, mode, preset, spacingId]);
 
-  if (presets.length === 0) {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState(0);
+
+  const downloadTemplate = () => {
+    const data = [
+      {
+        "Report Frequency": "Daily",
+        "CBC Performed? (Carbon Black Content)": "No",
+        "Preset *": presets[0]?.name || "",
+        "Spacing (cm) *": presets[0]?.spacings[0]?.value || "",
+        "Date of Mfg *": todayIso(),
+        "Date of Test *": todayIso(),
+        "Batch No *": isoToBatch(todayIso()),
+        "M/C No *": MC_NO_OPTIONS[0],
+        "Qty of Production *": "5",
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "BatchData");
+
+    // Add validation/dropdowns if possible? SheetJS limited on that in browser without extra libs, 
+    // but we can provide a clear template.
+    
+    XLSX.writeFile(workbook, "IS13488_Batch_Template.xlsx");
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsProcessing(true);
+    setProcessingProgress(0);
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: "binary" });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rows = XLSX.utils.sheet_to_json(ws) as any[];
+
+        const generatedReports: ReportData[] = [];
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          const pName = row["Preset *"];
+          const targetPreset = presets.find(p => p.name === pName) || presets[0];
+          const sVal = parseFloat(row["Spacing (cm) *"]);
+          const targetSpacing = targetPreset.spacings.find(s => s.value === sVal) || targetPreset.spacings[0];
+          
+          const batchOverrides: Partial<BasicInfo> = {
+            reportType: row["Report Frequency"] === "Weekly" ? "Weekly" : "Daily",
+            cbcPerformed: String(row["CBC Performed? (Carbon Black Content)"]).toLowerCase() === "yes",
+            dateOfMfg: isoToDisplay(row["Date of Mfg *"]),
+            dateOfTest: isoToDisplay(row["Date of Test *"]),
+            batchNo: String(row["Batch No *"]),
+            mcNo: String(row["M/C No *"]),
+            qtyOfProduction: row["Qty of Production *"] ? `${row["Qty of Production *"]} Coil X 500 Mtr` : "",
+          };
+
+          // Batch mode always uses Automatic (Magic)
+          const report = generateRandomReport(targetPreset, targetSpacing.id, batchOverrides);
+          generatedReports.push(report);
+          
+          setProcessingProgress(Math.round(((i + 1) / rows.length) * 100));
+          // Small delay for animation
+          await new Promise(r => setTimeout(r, 100));
+        }
+
+        // Save all and redirect
+        generatedReports.forEach(r => saveReport(r));
+        navigate("/saved");
+      } catch (err) {
+        console.error("Batch error:", err);
+        alert("Failed to process file. Please check template format.");
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  if (step === "selection") {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-2xl mx-auto px-6 py-12">
-          <Card className="p-8 text-center">
-            <h2 className="text-xl font-bold mb-2">No presets yet</h2>
-            <p className="text-muted-foreground mb-6">
-              Create at least one preset in Data Management before starting a new report.
-            </p>
-            <Button onClick={() => navigate("/data")}>Go to Data Management</Button>
-          </Card>
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-4xl w-full">
+          <div className="text-center mb-12">
+            <h1 className="text-4xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-emerald-600 to-blue-600 bg-clip-text text-transparent">
+              Report Generator Pro
+            </h1>
+            <p className="text-xl text-muted-foreground">Select your generation workflow</p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-8">
+            <Card 
+              className="group p-8 cursor-pointer border-2 hover:border-emerald-500 transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 relative overflow-hidden"
+              onClick={() => setStep("initial")}
+            >
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full -mr-8 -mt-8 transition-all group-hover:scale-150 group-hover:bg-emerald-100" />
+              <div className="relative z-10">
+                <div className="w-16 h-16 bg-emerald-500 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+                  <Pencil className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-bold mb-3">Single Report</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Create a single IS 13488 test report with full manual control or auto-fill magic.
+                </p>
+              </div>
+            </Card>
+
+            <Card 
+              className="group p-8 cursor-pointer border-2 hover:border-blue-500 transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 relative overflow-hidden"
+              onClick={() => setStep("batch")}
+            >
+              <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-8 -mt-8 transition-all group-hover:scale-150 group-hover:bg-blue-100" />
+              <div className="relative z-10">
+                <div className="w-16 h-16 bg-blue-500 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+                  <Wand2 className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-bold mb-3">Batch Generator</h3>
+                <span className="absolute top-4 right-4 bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">PRO</span>
+                <p className="text-muted-foreground leading-relaxed">
+                  Upload an Excel sheet to generate dozens of reports instantly. Uses high-speed auto-fill logic.
+                </p>
+              </div>
+            </Card>
+          </div>
+          
+          <div className="mt-12 text-center">
+            <Button variant="ghost" onClick={() => navigate("/saved")}>
+              <ArrowLeft className="w-4 h-4 mr-2" /> Back to Saved Reports
+            </Button>
+          </div>
         </div>
+      </div>
+    );
+  }
+
+  if (step === "batch") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="max-w-2xl w-full p-10 relative">
+          <Button variant="ghost" className="absolute top-4 left-4" onClick={() => setStep("selection")}>
+            <ArrowLeft className="w-4 h-4 mr-1" /> Back
+          </Button>
+          
+          <div className="text-center mb-10 mt-4">
+            <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <Download className="w-10 h-10" />
+            </div>
+            <h2 className="text-3xl font-bold mb-2">Batch Automation</h2>
+            <p className="text-muted-foreground">Follow the steps below to generate reports in bulk.</p>
+          </div>
+
+          <div className="space-y-8">
+            <div className="flex items-start gap-4 p-4 border rounded-xl bg-muted/30">
+              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 font-bold">1</div>
+              <div>
+                <h4 className="font-bold mb-1">Download Template</h4>
+                <p className="text-sm text-muted-foreground mb-3">Get the preformatted Excel file with the required headers.</p>
+                <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                  <Download className="w-4 h-4 mr-2" /> Download IS13488_Template.xlsx
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 p-4 border rounded-xl bg-muted/30">
+              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 font-bold">2</div>
+              <div className="flex-1">
+                <h4 className="font-bold mb-1">Upload Data</h4>
+                <p className="text-sm text-muted-foreground mb-4">Fill the data in the template and upload it here.</p>
+                <div className="relative group">
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                    onChange={handleFileUpload}
+                    disabled={isProcessing}
+                  />
+                  <div className="border-2 border-dashed border-muted-foreground/30 rounded-xl p-8 text-center group-hover:border-blue-500 group-hover:bg-blue-50/50 transition-all">
+                    <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <Save className="w-6 h-6" />
+                    </div>
+                    <p className="font-medium text-sm">Click to upload or drag & drop</p>
+                    <p className="text-xs text-muted-foreground mt-1">Excel files only (.xlsx, .xls)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {isProcessing && (
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-md flex flex-col items-center justify-center z-50 rounded-xl p-10 text-center">
+              <div className="relative w-32 h-32 mb-8">
+                <svg className="w-full h-full" viewBox="0 0 100 100">
+                  <circle className="text-muted/20 stroke-current" strokeWidth="8" fill="transparent" r="40" cx="50" cy="50" />
+                  <circle 
+                    className="text-blue-600 stroke-current transition-all duration-300" 
+                    strokeWidth="8" 
+                    strokeLinecap="round" 
+                    fill="transparent" 
+                    r="40" cx="50" cy="50"
+                    strokeDasharray="251.2"
+                    strokeDashoffset={251.2 - (251.2 * processingProgress) / 100}
+                    transform="rotate(-90 50 50)"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-blue-600">
+                  {processingProgress}%
+                </div>
+              </div>
+              <h3 className="text-2xl font-bold mb-2 animate-pulse">Generating Reports...</h3>
+              <p className="text-muted-foreground max-w-xs">Please wait while our engine creates your quality test reports using "Magic" mode.</p>
+            </div>
+          )}
+        </Card>
       </div>
     );
   }
