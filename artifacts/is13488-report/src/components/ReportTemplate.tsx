@@ -73,7 +73,14 @@ function SectionBar({ srNo, defaultText, data, value, className = "section-bar m
   
   // Add black border to main headers (srNo 1 to 15)
   const isMainHeader = /^\d+$/.test(srNo) && parseInt(srNo) >= 1 && parseInt(srNo) <= 15;
-  const style = isMainHeader ? { borderTop: "2px solid black", borderBottom: "2px solid black", padding: "2px 0" } : {};
+  const isSpecial = srNo === "11" || srNo === "12";
+  const style = isMainHeader ? { 
+    borderTop: "2px solid black", 
+    borderBottom: "2px solid black", 
+    paddingTop: isSpecial ? "2px" : "0px",
+    paddingBottom: isSpecial ? "2px" : "6px",
+    lineHeight: "1",
+  } : {};
   
   return <div className={className} style={style}>{text}</div>;
 }
