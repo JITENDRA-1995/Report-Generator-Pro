@@ -2,6 +2,7 @@ import type { ReportData, Preset, StandardSpec, StandardHeaderCustomization } fr
 import { v4 } from "./uuid";
 import { calcExponent } from "./calc";
 import { defaultPresets, defaultSpecs } from "./seedPresets";
+import { supabase } from "./supabase";
 
 const REPORTS_KEY = "is13488_reports_v2";
 const PRESETS_KEY = "is13488_presets_v7";
@@ -37,11 +38,24 @@ export function saveReport(r: ReportData): void {
   if (idx >= 0) all[idx] = r;
   else all.unshift(r);
   localStorage.setItem(REPORTS_KEY, JSON.stringify(all));
+
+  // Sync to Cloud (Background)
+  supabase.from('reports').upsert({ id: r.id, data: r }).then();
 }
 
 export function deleteReport(id: string): void {
   const all = getReports().filter((r) => r.id !== id);
   localStorage.setItem(REPORTS_KEY, JSON.stringify(all));
+  
+  // Sync to Cloud (Background)
+  supabase.from('reports').delete().eq('id', id).then();
+}
+
+export async function syncReportsFromCloud(): Promise<void> {
+  const { data, error } = await supabase.from('reports').select('data');
+  if (error || !data) return;
+  const reports = data.map(item => item.data as ReportData);
+  localStorage.setItem(REPORTS_KEY, JSON.stringify(reports));
 }
 
 // ----- Presets -----
@@ -71,10 +85,25 @@ export function upsertPreset(p: Preset): void {
   if (idx >= 0) all[idx] = p;
   else all.push(p);
   savePresets(all);
+ 
+  // Sync to Cloud
+  supabase.from('presets').upsert({ id: p.id, name: p.name, data: p, is_imported: p.isImported }).then();
 }
 
 export function deletePreset(id: string): void {
   savePresets(getPresets().filter((p) => p.id !== id));
+  
+  // Sync to Cloud
+  supabase.from('presets').delete().eq('id', id).then();
+}
+
+export async function syncPresetsFromCloud(): Promise<void> {
+  const { data, error } = await supabase.from('presets').select('data');
+  if (error || !data) return;
+  const presets = data.map(item => item.data as Preset);
+  if (presets.length > 0) {
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  }
 }
  
 export function importPresets(presets: Preset[]): void {
@@ -150,10 +179,25 @@ export function upsertSpec(s: StandardSpec): void {
   if (idx >= 0) all[idx] = s;
   else all.push(s);
   saveSpecs(all);
+ 
+  // Sync to Cloud
+  supabase.from('standard_specs').upsert({ id: s.id, data: s, is_imported: s.isImported }).then();
 }
-
+ 
 export function deleteSpec(id: string): void {
   saveSpecs(getSpecs().filter((s) => s.id !== id));
+  
+  // Sync to Cloud
+  supabase.from('standard_specs').delete().eq('id', id).then();
+}
+ 
+export async function syncSpecsFromCloud(): Promise<void> {
+  const { data, error } = await supabase.from('standard_specs').select('data');
+  if (error || !data) return;
+  const specs = data.map(item => item.data as StandardSpec);
+  if (specs.length > 0) {
+    localStorage.setItem(SPECS_KEY, JSON.stringify(specs));
+  }
 }
  
 export function importSpecs(specs: StandardSpec[]): void {
@@ -164,6 +208,8 @@ export function importSpecs(specs: StandardSpec[]): void {
     const idx = combined.findIndex(x => x.id === s.id);
     if (idx >= 0) combined[idx] = s;
     else combined.push(s);
+    // Sync each imported spec to cloud
+    supabase.from('standard_specs').upsert({ id: s.id, data: s, is_imported: true }).then();
   });
   saveSpecs(combined);
 }
@@ -201,11 +247,24 @@ export function saveCustomHeader(h: StandardHeaderCustomization) {
     all.push(h);
   }
   localStorage.setItem(CUSTOM_HEADERS_KEY, JSON.stringify(all));
+ 
+  // Sync to Cloud
+  supabase.from('custom_headers').upsert({ id: h.id, data: h }).then();
 }
-
+ 
 export function removeCustomHeader(id: string) {
   const all = getCustomHeaders();
   localStorage.setItem(CUSTOM_HEADERS_KEY, JSON.stringify(all.filter(x => x.id !== id)));
+  
+  // Sync to Cloud
+  supabase.from('custom_headers').delete().eq('id', id).then();
+}
+ 
+export async function syncHeadersFromCloud(): Promise<void> {
+  const { data, error } = await supabase.from('custom_headers').select('data');
+  if (error || !data) return;
+  const headers = data.map(item => item.data as StandardHeaderCustomization);
+  localStorage.setItem(CUSTOM_HEADERS_KEY, JSON.stringify(headers));
 }
 
 export function getCustomHeaderFor(size: string, className: string): StandardHeaderCustomization | undefined {

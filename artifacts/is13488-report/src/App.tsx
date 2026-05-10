@@ -9,6 +9,13 @@ import SavedReports from "@/pages/SavedReports";
 import DataManagement from "@/pages/DataManagement";
 
 import { Layout } from "@/components/Layout";
+import { useEffect } from "react";
+import { 
+  syncReportsFromCloud, 
+  syncPresetsFromCloud, 
+  syncSpecsFromCloud, 
+  syncHeadersFromCloud 
+} from "@/lib/storage";
 
 const queryClient = new QueryClient();
 
@@ -25,11 +32,34 @@ function Router() {
     </Layout>
   );
 }
+ 
+function CloudSync() {
+  useEffect(() => {
+    // Initial sync from cloud to local storage
+    const sync = async () => {
+      try {
+        await Promise.all([
+          syncReportsFromCloud(),
+          syncPresetsFromCloud(),
+          syncSpecsFromCloud(),
+          syncHeadersFromCloud()
+        ]);
+        console.log("Cloud sync complete.");
+      } catch (e) {
+        console.error("Cloud sync failed:", e);
+      }
+    };
+    sync();
+  }, []);
+  
+  return null;
+}
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <CloudSync />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <Router />
         </WouterRouter>
