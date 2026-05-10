@@ -52,10 +52,21 @@ export function deleteReport(id: string): void {
 }
 
 export async function syncReportsFromCloud(): Promise<void> {
-  const { data, error } = await supabase.from('reports').select('data');
-  if (error || !data) return;
-  const reports = data.map(item => item.data as ReportData);
-  localStorage.setItem(REPORTS_KEY, JSON.stringify(reports));
+  try {
+    const { data, error } = await supabase.from('reports').select('data');
+    if (error || !data || data.length === 0) return;
+    
+    const cloudReports = data.map(item => item.data as ReportData);
+    const localReports = getReports();
+    
+    // Merge: Keep all cloud reports, and add any local reports not yet in cloud
+    const cloudIds = new Set(cloudReports.map(r => r.id));
+    const merged = [...cloudReports, ...localReports.filter(r => !cloudIds.has(r.id))];
+    
+    localStorage.setItem(REPORTS_KEY, JSON.stringify(merged));
+  } catch (e) {
+    console.error("Report sync failed", e);
+  }
 }
 
 // ----- Presets -----
@@ -98,11 +109,19 @@ export function deletePreset(id: string): void {
 }
 
 export async function syncPresetsFromCloud(): Promise<void> {
-  const { data, error } = await supabase.from('presets').select('data');
-  if (error || !data) return;
-  const presets = data.map(item => item.data as Preset);
-  if (presets.length > 0) {
-    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  try {
+    const { data, error } = await supabase.from('presets').select('data');
+    if (error || !data || data.length === 0) return;
+    
+    const cloudPresets = data.map(item => item.data as Preset);
+    const localPresets = getPresets();
+    
+    const cloudIds = new Set(cloudPresets.map(p => p.id));
+    const merged = [...cloudPresets, ...localPresets.filter(p => !cloudIds.has(p.id))];
+    
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(merged));
+  } catch (e) {
+    console.error("Preset sync failed", e);
   }
 }
  
@@ -192,11 +211,19 @@ export function deleteSpec(id: string): void {
 }
  
 export async function syncSpecsFromCloud(): Promise<void> {
-  const { data, error } = await supabase.from('standard_specs').select('data');
-  if (error || !data) return;
-  const specs = data.map(item => item.data as StandardSpec);
-  if (specs.length > 0) {
-    localStorage.setItem(SPECS_KEY, JSON.stringify(specs));
+  try {
+    const { data, error } = await supabase.from('standard_specs').select('data');
+    if (error || !data || data.length === 0) return;
+    
+    const cloudSpecs = data.map(item => item.data as StandardSpec);
+    const localSpecs = getSpecs();
+    
+    const cloudIds = new Set(cloudSpecs.map(s => s.id));
+    const merged = [...cloudSpecs, ...localSpecs.filter(s => !cloudIds.has(s.id))];
+    
+    localStorage.setItem(SPECS_KEY, JSON.stringify(merged));
+  } catch (e) {
+    console.error("Spec sync failed", e);
   }
 }
  
@@ -261,10 +288,20 @@ export function removeCustomHeader(id: string) {
 }
  
 export async function syncHeadersFromCloud(): Promise<void> {
-  const { data, error } = await supabase.from('custom_headers').select('data');
-  if (error || !data) return;
-  const headers = data.map(item => item.data as StandardHeaderCustomization);
-  localStorage.setItem(CUSTOM_HEADERS_KEY, JSON.stringify(headers));
+  try {
+    const { data, error } = await supabase.from('custom_headers').select('data');
+    if (error || !data || data.length === 0) return;
+    
+    const cloudHeaders = data.map(item => item.data as StandardHeaderCustomization);
+    const localHeaders = getCustomHeaders();
+    
+    const cloudIds = new Set(cloudHeaders.map(h => h.id));
+    const merged = [...cloudHeaders, ...localHeaders.filter(h => !cloudIds.has(h.id))];
+    
+    localStorage.setItem(CUSTOM_HEADERS_KEY, JSON.stringify(merged));
+  } catch (e) {
+    console.error("Header sync failed", e);
+  }
 }
 
 export function getCustomHeaderFor(size: string, className: string): StandardHeaderCustomization | undefined {
