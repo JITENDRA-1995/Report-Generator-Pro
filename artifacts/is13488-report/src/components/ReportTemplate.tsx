@@ -73,7 +73,7 @@ function SectionBar({ srNo, defaultText, data, value, className = "section-bar m
   
   // Add 1px thin border to main headers (srNo 1 to 15)
   const isMainHeader = /^\d+$/.test(srNo) && parseInt(srNo) >= 1 && parseInt(srNo) <= 15;
-  const isSpecialBorder = srNo === "2" || srNo === "15";
+  const isSpecialBorder = srNo === "2" || srNo === "4" || srNo === "15";
   
   const style = isMainHeader ? { 
     borderTop: "1px solid black", 
@@ -864,7 +864,15 @@ function Page4({ data }: { data: ReportData }) {
         defaultText="15. Determination of Emitting Unit Exponent (CL 8.8 IS - 13488 : 2008) {'m' shall be less than 0.5}" 
         data={data} 
       />
-      <div style={{ padding: "4px 8px", fontSize: 13, lineHeight: 1.4, fontFamily: "serif" }}>
+      <div style={{ 
+        padding: "4px 8px", 
+        fontSize: 13, 
+        lineHeight: 1.4, 
+        fontFamily: "serif", 
+        borderLeft: "1px solid black", 
+        borderRight: "1px solid black", 
+        boxSizing: "border-box" 
+      }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
           <span style={{ fontStyle: "italic", fontSize: 16, marginRight: 8 }}>q&#x0304; = K · p<sup>m</sup></span>
         </div>
@@ -921,7 +929,17 @@ function Page4({ data }: { data: ReportData }) {
         </tbody>
       </table>
 
-      <div style={{ padding: "8px", fontSize: 13, lineHeight: 1.4, fontFamily: "serif" }}>
+      <div style={{ 
+        padding: "8px", 
+        fontSize: 13, 
+        lineHeight: 1.4, 
+        fontFamily: "serif", 
+        borderLeft: "1px solid black", 
+        borderRight: "1px solid black", 
+        borderBottom: "1px solid black", 
+        boxSizing: "border-box",
+        marginBottom: "8px"
+      }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontWeight: "bold", marginRight: 6 }}>m = </span>
           <div style={{ display: "inline-block", textAlign: "center" }}>
