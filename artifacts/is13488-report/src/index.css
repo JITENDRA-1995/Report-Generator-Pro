@@ -156,6 +156,8 @@
   border-bottom: none;
   font-size: 9.5pt;
   line-height: 1.2;
+  width: 100%;
+  box-sizing: border-box;
 }
 .row-shaded { background: #c8e9c1; }
 

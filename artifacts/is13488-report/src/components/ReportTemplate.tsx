@@ -79,6 +79,8 @@ function SectionBar({ srNo, defaultText, data, value, className = "section-bar m
     paddingTop: "0px",
     paddingBottom: "9.5px",
     lineHeight: "1.2",
+    width: "100%",
+    boxSizing: "border-box",
   } : {};
   
   return <div className={className} style={style}>{text}</div>;
