@@ -162,10 +162,23 @@ export default function NewReport() {
     reader.onload = async (evt) => {
       try {
         const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: "binary" });
+        const wb = XLSX.read(bstr, { type: "binary", cellDates: true });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const rows = XLSX.utils.sheet_to_json(ws) as any[];
+
+        const parseExcelDate = (val: any): string => {
+          if (!val) return todayIso();
+          if (val instanceof Date) {
+            return val.toISOString().split("T")[0];
+          }
+          if (typeof val === "number") {
+            // Excel serial date to JS Date
+            const d = new Date((val - 25569) * 86400 * 1000);
+            return d.toISOString().split("T")[0];
+          }
+          return String(val);
+        };
 
         const generatedReports: ReportData[] = [];
         for (let i = 0; i < rows.length; i++) {
@@ -175,12 +188,23 @@ export default function NewReport() {
           const sVal = parseFloat(row["Spacing (cm) *"]);
           const targetSpacing = targetPreset.spacings.find(s => s.value === sVal) || targetPreset.spacings[0];
           
+          const mfgDate = parseExcelDate(row["Date of Mfg *"]);
+          const testDate = parseExcelDate(row["Date of Test *"]);
+          
+          // If Batch No is a number/date, convert to YYYYMMDD string
+          let batchStr = row["Batch No *"];
+          if (typeof batchStr === "number" || batchStr instanceof Date) {
+             batchStr = isoToBatch(parseExcelDate(batchStr));
+          } else {
+             batchStr = String(batchStr);
+          }
+
           const batchOverrides: Partial<BasicInfo> = {
             reportType: row["Report Frequency"] === "Weekly" ? "Weekly" : "Daily",
             cbcPerformed: String(row["CBC Performed? (Carbon Black Content)"]).toLowerCase() === "yes",
-            dateOfMfg: isoToDisplay(row["Date of Mfg *"]),
-            dateOfTest: isoToDisplay(row["Date of Test *"]),
-            batchNo: String(row["Batch No *"]),
+            dateOfMfg: isoToDisplay(mfgDate),
+            dateOfTest: isoToDisplay(testDate),
+            batchNo: batchStr,
             mcNo: String(row["M/C No *"]),
             qtyOfProduction: row["Qty of Production *"] ? `${row["Qty of Production *"]} Coil X 500 Mtr` : "",
           };
