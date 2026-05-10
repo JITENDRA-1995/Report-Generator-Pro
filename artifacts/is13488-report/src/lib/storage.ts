@@ -76,6 +76,18 @@ export function upsertPreset(p: Preset): void {
 export function deletePreset(id: string): void {
   savePresets(getPresets().filter((p) => p.id !== id));
 }
+ 
+export function importPresets(presets: Preset[]): void {
+  const current = getPresets();
+  const imported = presets.map(p => ({ ...p, isImported: true }));
+  const combined = [...current];
+  imported.forEach(p => {
+    const idx = combined.findIndex(x => x.id === p.id);
+    if (idx >= 0) combined[idx] = p;
+    else combined.push(p);
+  });
+  savePresets(combined);
+}
 
 export function getPreset(id: string): Preset | null {
   return getPresets().find((p) => p.id === id) ?? null;
@@ -142,6 +154,18 @@ export function upsertSpec(s: StandardSpec): void {
 
 export function deleteSpec(id: string): void {
   saveSpecs(getSpecs().filter((s) => s.id !== id));
+}
+ 
+export function importSpecs(specs: StandardSpec[]): void {
+  const current = getSpecs();
+  const imported = specs.map(s => ({ ...s, isImported: true }));
+  const combined = [...current];
+  imported.forEach(s => {
+    const idx = combined.findIndex(x => x.id === s.id);
+    if (idx >= 0) combined[idx] = s;
+    else combined.push(s);
+  });
+  saveSpecs(combined);
 }
 
 export function getSpecFor(size: string, className: string, discharge: string): StandardSpec | undefined {

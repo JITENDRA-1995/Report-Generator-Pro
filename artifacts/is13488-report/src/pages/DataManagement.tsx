@@ -15,15 +15,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Plus, Trash2, Copy, Pencil, Save, X, Star, Download, RotateCcw } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Copy, Pencil, Save, X, Star, Download, RotateCcw, Upload } from "lucide-react";
 import {
   getPresets,
   upsertPreset,
   deletePreset,
+  importPresets,
   blankPreset,
   getSpecs,
   upsertSpec,
   deleteSpec,
+  importSpecs,
   getCustomHeaders,
   saveCustomHeader,
   removeCustomHeader,
@@ -163,6 +165,33 @@ function PresetsTab() {
     a.click();
     URL.revokeObjectURL(url);
   };
+ 
+  const handleImportJSON = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target?.result as string);
+          if (Array.isArray(json)) {
+            importPresets(json);
+            refresh();
+            alert("Presets imported successfully!");
+          } else {
+            alert("Invalid JSON format. Expected an array of presets.");
+          }
+        } catch (err) {
+          alert("Error parsing JSON file.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
 
   if (editing) {
     return (
@@ -191,6 +220,9 @@ function PresetsTab() {
           <Button variant="ghost" onClick={handleReset} className="text-muted-foreground hover:text-destructive">
             <RotateCcw className="w-4 h-4 mr-1" /> Reset to Defaults
           </Button>
+          <Button variant="outline" onClick={handleImportJSON}>
+            <Upload className="w-4 h-4 mr-1" /> Import JSON
+          </Button>
           <Button variant="outline" onClick={handleExportJSON}>
             <Download className="w-4 h-4 mr-1" /> Export JSON
           </Button>
@@ -209,6 +241,9 @@ function PresetsTab() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-lg">{p.name || "(unnamed)"}</span>
+                    {p.isImported && (
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">Imported</span>
+                    )}
                     {defaultId === p.id && (
                       <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">Default</span>
                     )}
@@ -771,6 +806,33 @@ function SpecsTab() {
     a.click();
     URL.revokeObjectURL(url);
   };
+ 
+  const handleImportSpecsJSON = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target?.result as string);
+          if (Array.isArray(json)) {
+            importSpecs(json);
+            refresh();
+            alert("Specifications imported successfully!");
+          } else {
+            alert("Invalid JSON format. Expected an array of specifications.");
+          }
+        } catch (err) {
+          alert("Error parsing JSON file.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
 
   return (
     <div className="mt-4 space-y-4">
@@ -782,6 +844,9 @@ function SpecsTab() {
         <div className="flex gap-2">
           <Button variant="ghost" onClick={handleReset} className="text-muted-foreground hover:text-destructive">
             <RotateCcw className="w-4 h-4 mr-1" /> Reset to Defaults
+          </Button>
+          <Button variant="outline" onClick={handleImportSpecsJSON}>
+            <Upload className="w-4 h-4 mr-1" /> Import JSON
           </Button>
           <Button variant="outline" onClick={handleExportSpecsJSON}>
             <Download className="w-4 h-4 mr-1" /> Export JSON
@@ -818,7 +883,12 @@ function SpecsTab() {
             {specs.map((s) => (
               <tr key={s.id}>
                 <td className="border p-1">
-                  <Input value={s.size} placeholder="e.g. 16 mm" onChange={(e) => updateRow({ ...s, size: e.target.value })} />
+                  <div className="relative">
+                    <Input value={s.size} placeholder="e.g. 16 mm" onChange={(e) => updateRow({ ...s, size: e.target.value })} />
+                    {s.isImported && (
+                      <span className="absolute -top-2 -right-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-1 rounded border border-blue-200">IMP</span>
+                    )}
+                  </div>
                 </td>
                 <td className="border p-1">
                   <Input value={s.className} placeholder="e.g. Class 2" onChange={(e) => updateRow({ ...s, className: e.target.value })} />

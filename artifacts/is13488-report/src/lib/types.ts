@@ -141,6 +141,7 @@ export interface Preset {
   wallThickness: ValRange;
   declaredDischargePerPressure: DischargePerPressure[];
   spacings: SpacingOption[];
+  isImported?: boolean;
 }
 
 export interface StandardHeaderCustomization {
@@ -161,4 +162,5 @@ export interface StandardSpec {
   wallThicknessMax: number;
   flowPathMin: number;
   notes: string;
+  isImported?: boolean;
 }
