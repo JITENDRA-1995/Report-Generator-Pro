@@ -33,13 +33,41 @@ function todayIso(): string {
 
 function isoToDisplay(iso: string): string {
   if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y}`;
+  
+  // If it's already in a DD/MM/YYYY-like format, normalize and pad it
+  const dmyMatch = iso.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+  }
+
+  // Handle YYYY-MM-DD format
+  const parts = iso.split("-");
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    // Handle cases where year might be first (YYYY-MM-DD)
+    if (y.length === 4) {
+      return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+    }
+    // Handle cases where it might be (DD-MM-YYYY) but split by -
+    return `${y.padStart(2, "0")}/${m.padStart(2, "0")}/${d}`;
+  }
+  
+  return iso;
 }
 
 function isoToBatch(iso: string): string {
-  return iso.replace(/-/g, "");
+  if (!iso) return "";
+  
+  // If it's DD/MM/YYYY, convert to YYYYMMDD for batch consistency
+  const dmyMatch = iso.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    return `${y}${m.padStart(2, "0")}${d.padStart(2, "0")}`;
+  }
+  
+  // Just strip all delimiters
+  return iso.replace(/[\/\-.]/g, "");
 }
 
 import { HeaderActions } from "@/components/HeaderActions";
