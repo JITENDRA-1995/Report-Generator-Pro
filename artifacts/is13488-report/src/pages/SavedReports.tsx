@@ -72,7 +72,7 @@ export default function SavedReports() {
       
       for (let i = 0; i < pages.length; i++) {
         const canvas = await html2canvasLib(pages[i], {
-          scale: 2.5, // Slightly lower scale for batch to save memory
+          scale: 1.8, // Reduced scale for batch to significantly save memory and prevent hanging
           useCORS: true,
           backgroundColor: '#ffffff',
           scrollY: 0,
@@ -139,8 +139,8 @@ export default function SavedReports() {
         const filename = `${r.basicInfo.mcNo}_${r.basicInfo.batchNo}`.replace(/[\/\\?%*:|"<>]/g, '-');
         folder?.file(`${filename}.pdf`, blob);
         
-        // Small yield to main thread to keep UI responsive and allow garbage collection
-        await new Promise(r => setTimeout(r, 0));
+        // Increased yield time and ensured DOM cleanup
+        await new Promise(r => setTimeout(r, 150));
       }
       
       const zipBlob = await zip.generateAsync({ type: "blob" });
