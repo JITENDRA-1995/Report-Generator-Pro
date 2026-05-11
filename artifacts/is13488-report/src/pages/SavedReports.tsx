@@ -50,8 +50,9 @@ export default function SavedReports() {
 
   const exportPDFBlob = async (r: ReportData): Promise<Blob> => {
     setDownloadingReport(r);
-    // Give time for the hidden component to mount and charts to render
-    await new Promise(resolve => setTimeout(resolve, 1200));
+    // Reduced wait time from 1200ms to 600ms for faster processing.
+    // This is generally sufficient for Recharts to initialize.
+    await new Promise(resolve => setTimeout(resolve, 600));
     
     try {
       const container = document.getElementById('download-target');
@@ -137,6 +138,9 @@ export default function SavedReports() {
         const blob = await exportPDFBlob(r);
         const filename = `${r.basicInfo.mcNo}_${r.basicInfo.batchNo}`.replace(/[\/\\?%*:|"<>]/g, '-');
         folder?.file(`${filename}.pdf`, blob);
+        
+        // Small yield to main thread to keep UI responsive and allow garbage collection
+        await new Promise(r => setTimeout(r, 0));
       }
       
       const zipBlob = await zip.generateAsync({ type: "blob" });

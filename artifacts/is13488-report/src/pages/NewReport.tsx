@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowLeft, Save, Eye, Wand2, Pencil, Download, Printer } from "lucide-react";
-import { getPresets, saveReport, getDefaultPresetId } from "@/lib/storage";
+import { getPresets, saveReport, saveReportsBatch, getDefaultPresetId } from "@/lib/storage";
 import { generateRandomReport, emptyReport } from "@/lib/random";
 import type { BasicInfo, Preset, ReportData } from "@/lib/types";
 import { ReportTemplate } from "@/components/ReportTemplate";
@@ -169,15 +169,28 @@ export default function NewReport() {
 
         const parseExcelDate = (val: any): string => {
           if (!val) return todayIso();
+          
+          let d: Date;
           if (val instanceof Date) {
-            return val.toISOString().split("T")[0];
-          }
-          if (typeof val === "number") {
+            d = val;
+          } else if (typeof val === "number") {
             // Excel serial date to JS Date
-            const d = new Date((val - 25569) * 86400 * 1000);
-            return d.toISOString().split("T")[0];
+            // 25569 is the number of days between 1900-01-01 and 1970-01-01
+            d = new Date((val - 25569) * 86400 * 1000);
+          } else {
+            const s = String(val).trim();
+            // Handle DD/MM/YYYY or D/M/YYYY
+            if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+              const [dd, mm, yyyy] = s.split("/");
+              return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+            }
+            return s;
           }
-          return String(val);
+
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
         };
 
         const generatedReports: ReportData[] = [];
@@ -214,12 +227,16 @@ export default function NewReport() {
           generatedReports.push(report);
           
           setProcessingProgress(Math.round(((i + 1) / rows.length) * 100));
-          // Small delay for animation
-          await new Promise(r => setTimeout(r, 100));
+          // Minimal delay to keep UI responsive without excessive waiting
+          if (rows.length > 20) {
+            if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+          } else {
+            await new Promise(r => setTimeout(r, 50));
+          }
         }
 
         // Save all and redirect
-        generatedReports.forEach(r => saveReport(r));
+        saveReportsBatch(generatedReports);
         navigate("/saved");
       } catch (err) {
         console.error("Batch error:", err);

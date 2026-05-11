@@ -47,6 +47,40 @@ export function saveReport(r: ReportData): void {
     });
 }
 
+export function saveReportsBatch(reports: ReportData[]): void {
+  const all = getReports();
+  const toUpsertCloud: { id: string, data: ReportData }[] = [];
+
+  reports.forEach(r => {
+    // Stability logic for forcedM
+    const exp = calcExponent(r.pressureTest);
+    if (exp.m >= 0.50 && !r.forcedM) {
+      const seed = r.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const pseudoRandom = Math.abs(Math.sin(seed)); 
+      r.forcedM = 0.4900 + (pseudoRandom * 0.0099);
+    } else if (exp.m < 0.50) {
+      delete r.forcedM;
+    }
+
+    const idx = all.findIndex((x) => x.id === r.id);
+    if (idx >= 0) all[idx] = r;
+    else all.unshift(r);
+
+    toUpsertCloud.push({ id: r.id, data: r });
+  });
+
+  localStorage.setItem(REPORTS_KEY, JSON.stringify(all));
+
+  // Sync to Cloud in one batch
+  if (toUpsertCloud.length > 0) {
+    supabase.from('reports').upsert(toUpsertCloud, { onConflict: 'id' })
+      .then(res => {
+        if (res.error) console.error("Cloud Save Error (Batch Reports):", res.error);
+        else console.log(`Cloud Sync Success (${toUpsertCloud.length} reports saved)`);
+      });
+  }
+}
+
 export function deleteReport(id: string): void {
   const all = getReports().filter((r) => r.id !== id);
   localStorage.setItem(REPORTS_KEY, JSON.stringify(all));
