@@ -11,7 +11,7 @@ import { getReports, deleteReport } from "@/lib/storage";
 import type { ReportData } from "@/lib/types";
 import { ReportTemplate } from "@/components/ReportTemplate";
 import { HeaderActions } from "@/components/HeaderActions";
-import JSZip from "jszip";
+// JSZip removed as requested
 
 export default function SavedReports() {
   const [, navigate] = useLocation();
@@ -72,7 +72,7 @@ export default function SavedReports() {
       
       for (let i = 0; i < pages.length; i++) {
         const canvas = await html2canvasLib(pages[i], {
-          scale: 1.8, // Reduced scale for batch to significantly save memory and prevent hanging
+          scale: 2.5, // Restored to 2.5 as requested
           useCORS: true,
           backgroundColor: '#ffffff',
           scrollY: 0,
@@ -125,9 +125,6 @@ export default function SavedReports() {
     setIsBatchProcessing(true);
     setBatchProgress({ current: 0, total: selectedIds.length });
     
-    const zip = new JSZip();
-    const folder = zip.folder("IS13488_Reports");
-    
     try {
       for (let i = 0; i < selectedIds.length; i++) {
         const id = selectedIds[i];
@@ -137,23 +134,24 @@ export default function SavedReports() {
         setBatchProgress(prev => ({ ...prev, current: i + 1 }));
         const blob = await exportPDFBlob(r);
         const filename = `${r.basicInfo.mcNo}_${r.basicInfo.batchNo}`.replace(/[\/\\?%*:|"<>]/g, '-');
-        folder?.file(`${filename}.pdf`, blob);
         
-        // Increased yield time and ensured DOM cleanup
-        await new Promise(r => setTimeout(r, 150));
+        // Trigger individual download
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${filename}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        // Wait between individual downloads to avoid browser block and keep UI responsive
+        await new Promise(r => setTimeout(r, 600));
       }
-      
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(zipBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Reports_Batch_${new Date().getTime()}.zip`;
-      link.click();
-      URL.revokeObjectURL(url);
       setSelectedIds([]);
     } catch (err) {
-      console.error("Batch export failed:", err);
-      alert("Batch export failed. Some reports might be missing.");
+      console.error("Batch download failed:", err);
+      alert("Batch download failed. Some reports might be missing.");
     } finally {
       setIsBatchProcessing(false);
       setBatchProgress({ current: 0, total: 0 });
@@ -377,7 +375,7 @@ export default function SavedReports() {
                   </>
                 ) : (
                   <>
-                    <Archive className="w-4 h-4 mr-2" /> Download ZIP
+                    <Download className="w-4 h-4 mr-2" /> Start Batch
                   </>
                 )}
               </Button>
@@ -408,7 +406,7 @@ export default function SavedReports() {
                 {Math.round((batchProgress.current / batchProgress.total) * 100)}%
               </div>
             </div>
-            <h3 className="text-xl font-bold mb-2">Creating ZIP Archive</h3>
+            <h3 className="text-xl font-bold mb-2">Downloading Reports</h3>
             <p className="text-sm text-slate-500">
               Generating PDF {batchProgress.current} of {batchProgress.total}.<br/>
               This may take a moment...
