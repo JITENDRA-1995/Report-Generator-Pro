@@ -194,16 +194,28 @@ export default function NewReport() {
     reader.onload = async (evt) => {
       try {
         const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: "binary", cellDates: true });
+        // Disable cellDates to get raw Excel serial numbers, which is the only way to be 100% sure of Day/Month order
+        const wb = XLSX.read(bstr, { type: "binary", cellDates: false });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const rows = XLSX.utils.sheet_to_json(ws, { raw: false }) as any[];
+        const rows = XLSX.utils.sheet_to_json(ws) as any[];
 
         const parseExcelDate = (val: any): string => {
           if (!val) return todayIso();
+          
+          // If it's a number, it's an Excel serial date. Use SSF to parse it correctly.
+          if (typeof val === "number") {
+            try {
+              const d = XLSX.SSF.parse_date_code(val);
+              return `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}`;
+            } catch (e) {
+              return todayIso();
+            }
+          }
+
           const s = String(val).trim();
           
-          // Try to match DD/MM/YYYY or D/M/YYYY (with /, -, or .)
+          // Strictly assume DD/MM/YYYY for any numeric date string
           const dmy = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
           if (dmy) {
             let [ , d, m, y] = dmy;
@@ -211,14 +223,14 @@ export default function NewReport() {
             return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
           }
           
-          // Try to match YYYY/MM/DD
+          // Try to match YYYY-MM-DD
           const ymd = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
           if (ymd) {
             const [ , y, m, d] = ymd;
             return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
           }
 
-          // Fallback to JS Date parsing for other formats like "1-Mar-2026"
+          // Last resort fallback
           const parsed = new Date(s);
           if (!isNaN(parsed.getTime())) {
              const y = parsed.getFullYear();
