@@ -28,29 +28,27 @@ const MC_NO_OPTIONS = [
 
 function todayIso(): string {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function isoToDisplay(iso: string): string {
   if (!iso) return "";
   
-  // If it's already in a DD/MM/YYYY-like format, normalize and pad it
+  // Try to match YYYY-MM-DD
+  const ymd = iso.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (ymd) {
+    const [, y, m, d] = ymd;
+    return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+  }
+
+  // If it's already in a DD/MM/YYYY-like format, ensure it's padded correctly
   const dmyMatch = iso.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
   if (dmyMatch) {
     const [, d, m, y] = dmyMatch;
     return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
-  }
-
-  // Handle YYYY-MM-DD format
-  const parts = iso.split("-");
-  if (parts.length === 3) {
-    const [y, m, d] = parts;
-    // Handle cases where year might be first (YYYY-MM-DD)
-    if (y.length === 4) {
-      return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
-    }
-    // Handle cases where it might be (DD-MM-YYYY) but split by -
-    return `${y.padStart(2, "0")}/${m.padStart(2, "0")}/${d}`;
   }
   
   return iso;
@@ -59,14 +57,20 @@ function isoToDisplay(iso: string): string {
 function isoToBatch(iso: string): string {
   if (!iso) return "";
   
-  // If it's DD/MM/YYYY, convert to YYYYMMDD for batch consistency
+  // If it's YYYY-MM-DD, convert to YYYYMMDD
+  const ymdMatch = iso.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+  if (ymdMatch) {
+    const [, y, m, d] = ymdMatch;
+    return `${y}${m.padStart(2, "0")}${d.padStart(2, "0")}`;
+  }
+
+  // If it's DD/MM/YYYY, convert to YYYYMMDD
   const dmyMatch = iso.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
   if (dmyMatch) {
     const [, d, m, y] = dmyMatch;
     return `${y}${m.padStart(2, "0")}${d.padStart(2, "0")}`;
   }
   
-  // Just strip all delimiters
   return iso.replace(/[\/\-.]/g, "");
 }
 
@@ -239,10 +243,12 @@ export default function NewReport() {
           
           // If Batch No is a number/date, convert to YYYYMMDD string
           let batchStr = row["Batch No *"];
-          if (typeof batchStr === "number" || batchStr instanceof Date) {
-             batchStr = isoToBatch(parseExcelDate(batchStr));
+          if (!batchStr) {
+            batchStr = isoToBatch(mfgDate);
+          } else if (typeof batchStr === "number" || batchStr instanceof Date) {
+            batchStr = isoToBatch(parseExcelDate(batchStr));
           } else {
-             batchStr = String(batchStr);
+            batchStr = String(batchStr).trim();
           }
 
           const batchOverrides: Partial<BasicInfo> = {
