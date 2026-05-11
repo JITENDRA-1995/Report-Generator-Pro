@@ -165,32 +165,37 @@ export default function NewReport() {
         const wb = XLSX.read(bstr, { type: "binary", cellDates: true });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const rows = XLSX.utils.sheet_to_json(ws) as any[];
+        const rows = XLSX.utils.sheet_to_json(ws, { raw: false }) as any[];
 
         const parseExcelDate = (val: any): string => {
           if (!val) return todayIso();
+          const s = String(val).trim();
           
-          let d: Date;
-          if (val instanceof Date) {
-            d = val;
-          } else if (typeof val === "number") {
-            // Excel serial date to JS Date
-            // 25569 is the number of days between 1900-01-01 and 1970-01-01
-            d = new Date((val - 25569) * 86400 * 1000);
-          } else {
-            const s = String(val).trim();
-            // Handle DD/MM/YYYY or D/M/YYYY
-            if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
-              const [dd, mm, yyyy] = s.split("/");
-              return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
-            }
-            return s;
+          // Try to match DD/MM/YYYY or D/M/YYYY (with /, -, or .)
+          const dmy = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+          if (dmy) {
+            let [ , d, m, y] = dmy;
+            if (y.length === 2) y = "20" + y;
+            return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+          }
+          
+          // Try to match YYYY/MM/DD
+          const ymd = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+          if (ymd) {
+            const [ , y, m, d] = ymd;
+            return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
           }
 
-          const y = d.getFullYear();
-          const m = String(d.getMonth() + 1).padStart(2, "0");
-          const day = String(d.getDate()).padStart(2, "0");
-          return `${y}-${m}-${day}`;
+          // Fallback to JS Date parsing for other formats like "1-Mar-2026"
+          const parsed = new Date(s);
+          if (!isNaN(parsed.getTime())) {
+             const y = parsed.getFullYear();
+             const m = String(parsed.getMonth() + 1).padStart(2, "0");
+             const d = String(parsed.getDate()).padStart(2, "0");
+             return `${y}-${m}-${d}`;
+          }
+
+          return s;
         };
 
         const generatedReports: ReportData[] = [];
