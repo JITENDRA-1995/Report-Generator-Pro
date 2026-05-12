@@ -5,9 +5,18 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   ArrowLeft, Eye, Printer, Trash2, Pencil, Download, FileText, 
-  CheckSquare, Square, Trash, Archive, X, CheckCircle2, Search
+  CheckSquare, Square, Trash, Archive, X, CheckCircle2, Search, Filter,
+  ChevronDown, Tag
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { getReports, deleteReport } from "@/lib/storage";
 import type { ReportData } from "@/lib/types";
 import { ReportTemplate } from "@/components/ReportTemplate";
@@ -26,22 +35,39 @@ export default function SavedReports() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
-  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+
+  const filterOptions = useMemo(() => {
+    const options: Record<string, string[]> = {
+      mcNo: Array.from(new Set(reports.map(r => r.basicInfo.mcNo))).sort(),
+      dateOfTest: Array.from(new Set(reports.map(r => r.basicInfo.dateOfTest))).sort(),
+      size: Array.from(new Set(reports.map(r => r.basicInfo.size))).sort(),
+      batchNo: Array.from(new Set(reports.map(r => r.basicInfo.batchNo))).sort(),
+    };
+    return options;
+  }, [reports]);
 
   const filteredReports = useMemo(() => {
-    if (!search.trim()) return reports;
-    const term = search.toLowerCase();
+    if (filterType === "all" || selectedFilters.length === 0) return reports;
+    
     return reports.filter(r => {
       const b = r.basicInfo;
-      return (
-        b.mcNo.toLowerCase().includes(term) ||
-        b.batchNo.toLowerCase().includes(term) ||
-        b.dateOfTest.toLowerCase().includes(term) ||
-        b.size.toLowerCase().includes(term) ||
-        b.className.toLowerCase().includes(term)
-      );
+      let val = "";
+      if (filterType === "mcNo") val = b.mcNo;
+      else if (filterType === "dateOfTest") val = b.dateOfTest;
+      else if (filterType === "size") val = b.size;
+      else if (filterType === "batchNo") val = b.batchNo;
+      
+      return selectedFilters.includes(val);
     });
-  }, [reports, search]);
+  }, [reports, filterType, selectedFilters]);
+
+  const toggleFilter = (val: string) => {
+    setSelectedFilters(prev => 
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
  
   useEffect(() => {
     const handleSync = () => {
@@ -294,23 +320,63 @@ export default function SavedReports() {
             </Button>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input 
-                placeholder="Search by M/C No, Batch No, Size, Date..." 
-                className="pl-10 bg-slate-50 border-slate-200 focus:bg-white transition-all shadow-inner"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 min-w-[80px]">
+                  <Filter className="w-4 h-4" /> Filter By:
+                </div>
+                <Select value={filterType} onValueChange={(v) => { setFilterType(v); setSelectedFilters([]); }}>
+                  <SelectTrigger className="w-[180px] bg-white border-slate-200">
+                    <SelectValue placeholder="Select Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Reports</SelectItem>
+                    <SelectItem value="mcNo">M/C No</SelectItem>
+                    <SelectItem value="dateOfTest">Date</SelectItem>
+                    <SelectItem value="size">Size</SelectItem>
+                    <SelectItem value="batchNo">Batch No</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {filterType !== "all" && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setSelectedFilters([])}
+                    className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 ml-auto"
+                  >
+                    Clear Filter
+                  </Button>
+                )}
+              </div>
+
+              {filterType !== "all" && (
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200 mt-2">
+                  {filterOptions[filterType].map(val => (
+                    <Badge 
+                      key={val}
+                      variant={selectedFilters.includes(val) ? "default" : "outline"}
+                      className={`cursor-pointer px-3 py-1 text-xs transition-all ${
+                        selectedFilters.includes(val) 
+                          ? "bg-emerald-600 hover:bg-emerald-700 border-emerald-600" 
+                          : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300"
+                      }`}
+                      onClick={() => toggleFilter(val)}
+                    >
+                      {val}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
 
             {filteredReports.length === 0 ? (
               <div className="text-center py-12 bg-slate-50 rounded-lg border border-dashed border-slate-200">
                 <Search className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 font-medium">No matching reports found for "{search}"</p>
-                <Button variant="ghost" size="sm" onClick={() => setSearch("")} className="mt-2 text-emerald-600">
-                  Clear Search
+                <p className="text-slate-500 font-medium">No reports match the selected filters.</p>
+                <Button variant="ghost" size="sm" onClick={() => { setFilterType("all"); setSelectedFilters([]); }} className="mt-2 text-emerald-600">
+                  Reset Filters
                 </Button>
               </div>
             ) : (
