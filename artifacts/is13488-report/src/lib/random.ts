@@ -1,7 +1,6 @@
 import type { ReportData, Preset, SpacingOption, BasicInfo } from "./types";
 import { v4 } from "./uuid";
 import { calcExponent } from "./calc";
-import { getProfile } from "./storage";
 
 function rnd(min: number, max: number, decimals = 2): number {
   if (min === max) return min;
@@ -144,7 +143,7 @@ export function generateRandomReport(p: Preset, spacingId: string | undefined, o
     createdAt: new Date().toISOString(),
     presetId: p.id,
     basicInfo: {
-      formatNo: getProfile().formatNoPrefix,
+      formatNo: "QC/2025-26",
       dateOfMfg: "",
       dateOfTest: "",
       size: p.size,
@@ -204,7 +203,7 @@ export function emptyReport(p: Preset, spacingId: string | undefined, overrides:
     createdAt: new Date().toISOString(),
     presetId: p.id,
     basicInfo: {
-      formatNo: getProfile().formatNoPrefix,
+      formatNo: "QC/2025-26",
       dateOfMfg: "",
       dateOfTest: "",
       size: p.size,

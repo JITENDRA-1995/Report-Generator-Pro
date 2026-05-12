@@ -1,8 +1,7 @@
+import type { ReportData } from "@/lib/types";
 import { ParagonLogo } from "./Logo";
-import { getProfile } from "@/lib/storage";
 
-export function ReportHeader({ data }: { data: any }) {
-  const profile = getProfile();
+export function ReportHeader({ data }: { data: ReportData }) {
   return (
     <table className="report-header-table">
       <tbody>
@@ -11,9 +10,9 @@ export function ReportHeader({ data }: { data: any }) {
             <ParagonLogo />
           </td>
           <td rowSpan={2} className="report-header-title" style={{ width: "50%", padding: "2px", lineHeight: "1.1" }}>
-            <div className="font-bold text-lg text-emerald-800">{profile.companyName}</div>
-            <div className="text-[10px] text-slate-600 font-medium">{profile.companyAddress}</div>
-            <div className="mt-1 font-bold text-slate-800">EMITTING PIPE (IS 13488:2008) TEST REPORT</div>
+            EMITTING PIPE (IS 13488:2008)
+            <br />
+            TEST REPORT
           </td>
           <td style={{ width: "15%", padding: "2px 6px" }}>Format No:</td>
           <td style={{ width: "15%", padding: "2px 6px" }}>{data.basicInfo.formatNo}</td>

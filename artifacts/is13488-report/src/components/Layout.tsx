@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, FilePlus, FolderOpen, Settings, LogOut, User } from "lucide-react";
+import { Home, FilePlus, FolderOpen, Settings, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/new", label: "New Report", icon: FilePlus },
     { href: "/saved", label: "Saved Reports", icon: FolderOpen },
     { href: "/data", label: "Data Management", icon: Settings },
-    { href: "/profile", label: "Profile", icon: User },
   ];
 
   return (

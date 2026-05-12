@@ -1,4 +1,4 @@
-import type { ReportData, Preset, StandardSpec, StandardHeaderCustomization, UserProfile } from "./types";
+import type { ReportData, Preset, StandardSpec, StandardHeaderCustomization } from "./types";
 import { v4 } from "./uuid";
 import { calcExponent } from "./calc";
 import { defaultPresets, defaultSpecs } from "./seedPresets";
@@ -9,7 +9,6 @@ const PRESETS_KEY = "is13488_presets_v7";
 const SPECS_KEY = "is13488_specs_v1";
 const CUSTOM_HEADERS_KEY = "is13488_custom_headers_v1";
 const DEFAULT_PRESET_KEY = "is13488_default_preset_id";
-const PROFILE_KEY = "is13488_user_profile_v1";
 
 
 // ----- Reports -----
@@ -354,49 +353,6 @@ export async function syncHeadersFromCloud(): Promise<void> {
 
 export function getCustomHeaderFor(size: string, className: string): StandardHeaderCustomization | undefined {
   return getCustomHeaders().find(h => h.size === size && h.className === className);
-}
-
-// ----- User Profile -----
-export function getProfile(): UserProfile {
-  try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    if (!raw) return {
-      companyName: "PARAGON INDUSTRIAL SOLUTIONS",
-      companyAddress: "SURVEY NO. 147, PLOT NO. 7 TO 10, RAJKOT-GONDAL HIGHWAY, VERAVAL (SHAPAR), DIST. RAJKOT - 360024 (GUJARAT) INDIA",
-      formatNoPrefix: "QC/2025-26"
-    };
-    return JSON.parse(raw);
-  } catch {
-    return {
-      companyName: "PARAGON INDUSTRIAL SOLUTIONS",
-      companyAddress: "SURVEY NO. 147, PLOT NO. 7 TO 10, RAJKOT-GONDAL HIGHWAY, VERAVAL (SHAPAR), DIST. RAJKOT - 360024 (GUJARAT) INDIA",
-      formatNoPrefix: "QC/2025-26"
-    };
-  }
-}
-
-export function saveProfile(p: UserProfile): void {
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
-  
-  // Sync to Cloud
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    if (!session) return;
-    supabase.from('profiles').upsert({ id: session.user.id, data: p }, { onConflict: 'id' }).then();
-  });
-}
-
-export async function syncProfileFromCloud(): Promise<void> {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const { data, error } = await supabase.from('profiles').select('data').eq('id', session.user.id).single();
-    if (error || !data) return;
-    
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(data.data));
-  } catch (e) {
-    console.error("Profile sync failed", e);
-  }
 }
 
 export function resetToDefaults() {
