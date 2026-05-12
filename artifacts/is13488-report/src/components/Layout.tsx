@@ -22,6 +22,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/new", label: "New Report", icon: FilePlus },
     { href: "/saved", label: "Saved Reports", icon: FolderOpen },
     { href: "/data", label: "Data Management", icon: Settings },
+    { href: "/profile", label: "Profile", icon: User },
   ];
 
   return (

@@ -164,3 +164,12 @@ export interface StandardSpec {
   notes: string;
   isImported?: boolean;
 }
+
+export interface UserProfile {
+  companyName: string;
+  companyAddress: string;
+  formatNoPrefix: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+}

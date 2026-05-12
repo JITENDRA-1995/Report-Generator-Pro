@@ -8,6 +8,7 @@ import NewReport from "@/pages/NewReport";
 import SavedReports from "@/pages/SavedReports";
 import DataManagement from "@/pages/DataManagement";
 import Login from "@/pages/Login";
+import Profile from "@/pages/Profile";
 
 import { Layout } from "@/components/Layout";
 import { useEffect, useState } from "react";
@@ -16,7 +17,8 @@ import {
   syncReportsFromCloud, 
   syncPresetsFromCloud, 
   syncSpecsFromCloud, 
-  syncHeadersFromCloud 
+  syncHeadersFromCloud,
+  syncProfileFromCloud
 } from "@/lib/storage";
 
 const queryClient = new QueryClient();
@@ -64,6 +66,7 @@ function Router() {
         <Route path="/new" component={NewReport} />
         <Route path="/saved" component={SavedReports} />
         <Route path="/data" component={DataManagement} />
+        <Route path="/profile" component={Profile} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
@@ -82,7 +85,8 @@ function CloudSync() {
           syncReportsFromCloud(),
           syncPresetsFromCloud(),
           syncSpecsFromCloud(),
-          syncHeadersFromCloud()
+          syncHeadersFromCloud(),
+          syncProfileFromCloud()
         ]);
         console.log("Cloud sync complete.");
         // Signal the UI to refresh
