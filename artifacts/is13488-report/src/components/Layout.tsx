@@ -1,9 +1,21 @@
 import { Link, useLocation } from "wouter";
-import { Home, FilePlus, FolderOpen, Settings } from "lucide-react";
+import { Home, FilePlus, FolderOpen, Settings, LogOut, User } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast({
+      title: "Signed Out",
+      description: "You have been securely logged out.",
+    });
+    navigate("/login");
+  };
 
   const navItems = [
     { href: "/", label: "Home", icon: Home },
@@ -38,9 +50,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-4">
             <div id="header-actions" className="flex items-center gap-2" />
-            <div className="flex items-center text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-50">
+            <div className="flex items-center text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-50 mr-2">
               IS 13488 : 2008
             </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleLogout}
+              className="text-slate-400 hover:text-red-600 hover:bg-red-50 h-8 w-8"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </header>
