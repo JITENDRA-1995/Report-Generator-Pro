@@ -5,8 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   ArrowLeft, Eye, Printer, Trash2, Pencil, Download, FileText, 
-  CheckSquare, Square, Trash, Archive, X, CheckCircle2
+  CheckSquare, Square, Trash, Archive, X, CheckCircle2, Search
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { getReports, deleteReport } from "@/lib/storage";
 import type { ReportData } from "@/lib/types";
 import { ReportTemplate } from "@/components/ReportTemplate";
@@ -25,6 +26,22 @@ export default function SavedReports() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [search, setSearch] = useState("");
+
+  const filteredReports = useMemo(() => {
+    if (!search.trim()) return reports;
+    const term = search.toLowerCase();
+    return reports.filter(r => {
+      const b = r.basicInfo;
+      return (
+        b.mcNo.toLowerCase().includes(term) ||
+        b.batchNo.toLowerCase().includes(term) ||
+        b.dateOfTest.toLowerCase().includes(term) ||
+        b.size.toLowerCase().includes(term) ||
+        b.className.toLowerCase().includes(term)
+      );
+    });
+  }, [reports, search]);
  
   useEffect(() => {
     const handleSync = () => {
@@ -41,10 +58,13 @@ export default function SavedReports() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === reports.length) {
-      setSelectedIds([]);
+    const visibleIds = filteredReports.map(r => r.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
+    
+    if (allVisibleSelected) {
+      setSelectedIds(prev => prev.filter(id => !visibleIds.includes(id)));
     } else {
-      setSelectedIds(reports.map(r => r.id));
+      setSelectedIds(prev => [...new Set([...prev, ...visibleIds])]);
     }
   };
 
@@ -274,8 +294,28 @@ export default function SavedReports() {
             </Button>
           </div>
         ) : (
-          <div className="space-y-3">
-            {reports.map((r) => (
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input 
+                placeholder="Search by M/C No, Batch No, Size, Date..." 
+                className="pl-10 bg-slate-50 border-slate-200 focus:bg-white transition-all shadow-inner"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            {filteredReports.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                <Search className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 font-medium">No matching reports found for "{search}"</p>
+                <Button variant="ghost" size="sm" onClick={() => setSearch("")} className="mt-2 text-emerald-600">
+                  Clear Search
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredReports.map((r) => (
               <Card 
                 key={r.id} 
                 className={`p-4 hover:shadow-md transition-all flex items-center justify-between border-slate-200 cursor-pointer ${selectedIds.includes(r.id) ? 'border-emerald-500 bg-emerald-50/30' : ''}`}
@@ -325,7 +365,9 @@ export default function SavedReports() {
                   </Button>
                 </div>
               </Card>
-            ))}
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
