@@ -8,6 +8,7 @@ import NewReport from "@/pages/NewReport";
 import SavedReports from "@/pages/SavedReports";
 import DataManagement from "@/pages/DataManagement";
 import Login from "@/pages/Login";
+import StandardSelector from "@/pages/StandardSelector";
 
 import { Layout } from "@/components/Layout";
 import { useEffect, useState } from "react";
@@ -25,6 +26,7 @@ function Router() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [, navigate] = useLocation();
+  const [standardSelected, setStandardSelected] = useState(!!localStorage.getItem('current_standard'));
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -55,6 +57,10 @@ function Router() {
         <Route component={Login} />
       </Switch>
     );
+  }
+
+  if (!standardSelected) {
+    return <StandardSelector />;
   }
 
   return (
