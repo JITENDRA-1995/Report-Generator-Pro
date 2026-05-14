@@ -84,7 +84,7 @@ export default function NewReport() {
   const [presetId, setPresetId] = useState<string>(() => {
     const defId = getDefaultPresetId();
     // Use saved default if it exists in presets list, otherwise fall back to first preset
-    return (defId && presets.some(p => p.id === defId)) ? defId : (presets[0]?.id ?? "");
+    return (defId && presets.some((p: Preset) => p.id === defId)) ? defId : (presets[0]?.id ?? "");
   });
   const [spacingId, setSpacingId] = useState<string>("");
   const [mode, setMode] = useState<Mode>("auto");
@@ -120,7 +120,7 @@ export default function NewReport() {
   const [isManualDischarge, setIsManualDischarge] = useState<boolean>(false);
   const [manualDischargeText, setManualDischargeText] = useState<string>("");
 
-  const preset = presets.find((p) => p.id === presetId) ?? null;
+  const preset = presets.find((p: Preset) => p.id === presetId) ?? null;
 
   useEffect(() => {
     if (preset && !spacingId) setSpacingId(preset.spacings[0]?.id ?? "");
@@ -246,9 +246,9 @@ export default function NewReport() {
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
           const pName = row["Preset *"];
-          const targetPreset = presets.find(p => p.name === pName) || presets[0];
+          const targetPreset = presets.find((p: Preset) => p.name === pName) || presets[0];
           const sVal = parseFloat(row["Spacing (cm) *"]);
-          const targetSpacing = targetPreset.spacings.find(s => s.value === sVal) || targetPreset.spacings[0];
+          const targetSpacing = targetPreset.spacings.find((s: any) => s.value === sVal) || targetPreset.spacings[0];
           
           const mfgDate = parseExcelDate(row["Date of Mfg *"]);
           const testDate = parseExcelDate(row["Date of Test *"]);
@@ -547,10 +547,10 @@ export default function NewReport() {
           <Card className="p-6 space-y-5">
             <div>
               <Label>Preset *</Label>
-              <Select value={presetId} onValueChange={(v) => { setPresetId(v); setSpacingId(""); }}>
+              <Select value={presetId} onValueChange={(v: string) => { setPresetId(v); setSpacingId(""); }}>
                 <SelectTrigger><SelectValue placeholder="Select a preset" /></SelectTrigger>
                 <SelectContent>
-                  {presets.map((p) => (
+                  {presets.map((p: Preset) => (
                     <SelectItem key={p.id} value={p.id}>{p.name || "(unnamed)"}</SelectItem>
                   ))}
                 </SelectContent>
@@ -569,7 +569,7 @@ export default function NewReport() {
                   <Select value={spacingId} onValueChange={setSpacingId}>
                     <SelectTrigger><SelectValue placeholder="Select spacing" /></SelectTrigger>
                     <SelectContent>
-                      {preset.spacings.map((s) => (
+                      {preset.spacings.map((s: any) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.value.toFixed(2)} cm  ({s.min.toFixed(2)}–{s.max.toFixed(2)} cm)
                         </SelectItem>
@@ -602,7 +602,7 @@ export default function NewReport() {
                 <Input
                   value={batchNo}
                   placeholder="YYYYMMDD"
-                  onChange={(e) => { setBatchTouched(true); setBatchNo(e.target.value); }}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setBatchTouched(true); setBatchNo(e.target.value); }}
                 />
               </div>
               <div>
@@ -866,8 +866,8 @@ function BasicForm({ data, setData, preset }: { data: ReportData; setData: (r: R
           "Spacing (cm)",
           <Select
             value={b.spacing}
-            onValueChange={(v) => {
-              const sp = preset.spacings.find((s) => String(s.value) === v);
+            onValueChange={(v: string) => {
+              const sp = preset.spacings.find((s: any) => String(s.value) === v);
               setData({
                 ...data,
                 basicInfo: { ...b, spacing: v },
@@ -877,7 +877,7 @@ function BasicForm({ data, setData, preset }: { data: ReportData; setData: (r: R
           >
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {preset.spacings.map((s) => (
+              {preset.spacings.map((s: any) => (
                 <SelectItem key={s.id} value={String(s.value)}>{s.value} cm</SelectItem>
               ))}
             </SelectContent>
@@ -929,7 +929,7 @@ function NumGrid({
                 <Input
                   type="number" step="any" className="h-8"
                   value={values[r]?.[c] ?? 0}
-                  onChange={(e) => set(r, c, parseFloat(e.target.value) || 0)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => set(r, c, parseFloat(e.target.value) || 0)}
                 />
               </td>
             ))}
@@ -942,14 +942,14 @@ function NumGrid({
 
 function DimensionForm({ data, setData }: { data: ReportData; setData: (r: ReportData) => void }) {
   const setId = (r: number, c: number, v: number) => {
-    const next = data.dimensions.map((row, i) =>
-      i === r ? { ...row, insideDiameter: row.insideDiameter.map((x, j) => (j === c ? v : x)) } : row,
+    const next = data.dimensions.map((row: any, i: number) =>
+      i === r ? { ...row, insideDiameter: row.insideDiameter.map((x: number, j: number) => (j === c ? v : x)) } : row,
     );
     setData({ ...data, dimensions: next });
   };
   const setWt = (r: number, c: number, v: number) => {
-    const next = data.dimensions.map((row, i) =>
-      i === r ? { ...row, wallThickness: row.wallThickness.map((x, j) => (j === c ? v : x)) } : row,
+    const next = data.dimensions.map((row: any, i: number) =>
+      i === r ? { ...row, wallThickness: row.wallThickness.map((x: number, j: number) => (j === c ? v : x)) } : row,
     );
     setData({ ...data, dimensions: next });
   };
@@ -958,12 +958,12 @@ function DimensionForm({ data, setData }: { data: ReportData; setData: (r: Repor
       <div>
         <h3 className="font-semibold mb-2">Inside Diameter (mm)</h3>
         <NumGrid rows={3} cols={4} rowLabels={["1","2","3"]} colLabels={["I","II","III","IV"]}
-          values={data.dimensions.map((d) => d.insideDiameter)} set={setId} />
+          values={data.dimensions.map((d: any) => d.insideDiameter)} set={setId} />
       </div>
       <div>
         <h3 className="font-semibold mb-2">Wall Thickness (mm)</h3>
         <NumGrid rows={3} cols={4} rowLabels={["1","2","3"]} colLabels={["I","II","III","IV"]}
-          values={data.dimensions.map((d) => d.wallThickness)} set={setWt} />
+          values={data.dimensions.map((d: any) => d.wallThickness)} set={setWt} />
       </div>
     </Card>
   );
@@ -975,9 +975,9 @@ function FlowSpacingForm({ data, setData }: { data: ReportData; setData: (r: Rep
       <div>
         <h3 className="font-semibold mb-2">Flow Path (mm) — 5 samples</h3>
         <div className="grid grid-cols-5 gap-2">
-          {data.flowPath.values.map((v, i) => (
+          {data.flowPath.values.map((v: number, i: number) => (
             <Input key={i} type="number" step="any" value={v}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 const next = [...data.flowPath.values];
                 next[i] = parseFloat(e.target.value) || 0;
                 setData({ ...data, flowPath: { ...data.flowPath, values: next } });
@@ -996,9 +996,9 @@ function FlowSpacingForm({ data, setData }: { data: ReportData; setData: (r: Rep
       <div>
         <h3 className="font-semibold mb-2">Spacing of Emitting Unit (cm) — 10 samples</h3>
         <div className="grid grid-cols-5 gap-2">
-          {data.spacing.values.map((v, i) => (
+          {data.spacing.values.map((v: number, i: number) => (
             <Input key={i} type="number" step="any" value={v}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 const next = [...data.spacing.values];
                 next[i] = parseFloat(e.target.value) || 0;
                 setData({ ...data, spacing: { ...data.spacing, values: next } });
@@ -1015,11 +1015,11 @@ function UniformityForm({ data, setData }: { data: ReportData; setData: (r: Repo
     <Card className="p-6 mt-4">
       <h3 className="font-semibold mb-2">Uniformity of Emission Rate — 25 emitting units (LPH)</h3>
       <div className="grid grid-cols-5 gap-2">
-        {data.uniformity.map((u, i) => (
+        {data.uniformity.map((u: any, i: number) => (
           <div key={i}>
             <Label className="text-xs">{i + 1}</Label>
             <Input type="number" step="any" value={u.emissionRate}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 const next = [...data.uniformity];
                 next[i] = { emissionRate: parseFloat(e.target.value) || 0 };
                 setData({ ...data, uniformity: next });
@@ -1042,7 +1042,7 @@ function HydraulicForm({ data, setData }: { data: ReportData; setData: (r: Repor
       <div className="grid grid-cols-5 gap-2 mt-1">
         {(data[section] as any)[fld].map((v: number, i: number) => (
           <Input key={i} type="number" step="any" value={v}
-            onChange={(e) => {
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
               const arr = [...(data[section] as any)[fld]];
               arr[i] = parseFloat(e.target.value) || 0;
               setData({ ...data, [section]: { ...(data[section] as any), [fld]: arr } });
@@ -1089,20 +1089,20 @@ function PressureForm({ data, setData }: { data: ReportData; setData: (r: Report
           </tr>
         </thead>
         <tbody>
-          {data.pressureTest.map((row, r) => (
+          {data.pressureTest.map((row: any, r: number) => (
             <tr key={r}>
               <td className="border p-1">
                 <Input type="number" step="any" value={row.pressure}
-                  onChange={(e) => {
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     const next = [...data.pressureTest];
                     next[r] = { ...row, pressure: parseFloat(e.target.value) || 0 };
                     setData({ ...data, pressureTest: next });
                   }} />
               </td>
-              {row.readings.map((v, c) => (
+              {row.readings.map((v: number, c: number) => (
                 <td key={c} className="border p-1">
                   <Input type="number" step="any" value={v}
-                    onChange={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const next = [...data.pressureTest];
                       const readings = [...row.readings];
                       readings[c] = parseFloat(e.target.value) || 0;

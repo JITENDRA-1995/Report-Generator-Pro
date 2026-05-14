@@ -1,15 +1,12 @@
 import { Link, useLocation } from "wouter";
-import { Home, FilePlus, FolderOpen, Settings, LogOut, RefreshCw } from "lucide-react";
+import { Home, FilePlus, FolderOpen, Settings, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
-import { getCurrentStandard } from "@/lib/standards";
 import { Button } from "@/components/ui/button";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { toast } = useToast();
-
-  const currentStandard = getCurrentStandard();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -18,11 +15,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       description: "You have been securely logged out.",
     });
     navigate("/login");
-  };
-
-  const handleSwitchStandard = () => {
-    localStorage.removeItem('current_standard');
-    window.location.href = "/";
   };
 
   const navItems = [
@@ -58,26 +50,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-4">
             <div id="header-actions" className="flex items-center gap-2" />
-            <div className="flex flex-col items-end mr-4">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-70">
-                Current Standard
-              </div>
-              <div className="text-xs font-bold text-emerald-700">
-                {currentStandard.name}
-              </div>
+            <div className="flex items-center text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-50 mr-2">
+              IS 13488 : 2008
             </div>
-            
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleSwitchStandard}
-              className="h-8 gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 mr-2"
-              title="Switch Standard"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Switch</span>
-            </Button>
-
             <Button 
               variant="ghost" 
               size="icon" 
