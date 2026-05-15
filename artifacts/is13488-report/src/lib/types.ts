@@ -29,8 +29,10 @@ export interface CarbonContent {
 
 export interface FlowPath {
   values: number[];
-  declaredMin: number;
-  declared: number;
+  declaredMin: number; // old
+  declared: number;    // old
+  minLimit?: number;
+  declaredLimit?: number;
 }
 
 export interface SpacingTest {
@@ -50,6 +52,8 @@ export interface PullOutTest {
 
 export interface UniformityRow {
   emissionRate: number;
+  dischargeInSecs?: number;
+  dischargeLph?: number;
 }
 
 export interface HydraulicTest {
@@ -130,6 +134,7 @@ export interface Preset {
   category: string;
   discharge: number;
   minFlowPath: ValRange;
+  declaredFlowPath?: ValRange;
   specimenLength: number;
   lengthBeforeTest: number;
   appliedLoad: number;
@@ -161,6 +166,7 @@ export interface StandardSpec {
   wallThicknessMin: number;
   wallThicknessMax: number;
   flowPathMin: number;
+  declaredFlowPath?: number;
   notes: string;
   isImported?: boolean;
 }

@@ -1,6 +1,6 @@
-import type { ReportData } from "@/lib/types";
-import { avg, fmt, calcUniformity, calcExponent } from "@/lib/calc";
-import { getPreset, getCustomHeaderFor, getSpecFor } from "@/lib/storage";
+import type { ReportData } from "../../lib/types";
+import { avg, fmt, calcUniformity, calcExponent } from "../../lib/calc";
+import { getPreset, getCustomHeaderFor, getSpecFor } from "../../lib/storage";
 import { ReportHeader } from "./ReportHeader";
 import {
   LineChart,

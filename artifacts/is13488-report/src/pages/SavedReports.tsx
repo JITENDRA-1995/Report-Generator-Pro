@@ -19,7 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getReports, deleteReport } from "@/lib/storage";
 import type { ReportData } from "@/lib/types";
-import { ReportTemplate } from "@/components/ReportTemplate";
+import { getCurrentStandard } from "@/standards/registry";
 import { HeaderActions } from "@/components/HeaderActions";
 // JSZip removed as requested
 
@@ -275,7 +275,10 @@ export default function SavedReports() {
           </Button>
         </HeaderActions>
         <div className="py-8">
-          <ReportTemplate data={viewing} isExporting={isExporting} />
+          {(() => {
+            const Template = getCurrentStandard().components.Template;
+            return <Template data={viewing} isExporting={isExporting} />;
+          })()}
         </div>
       </div>
     );
@@ -526,7 +529,10 @@ export default function SavedReports() {
       {/* Hidden container for direct downloads */}
       {downloadingReport && (
         <div id="download-target" style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-          <ReportTemplate data={downloadingReport} isExporting={true} />
+          {(() => {
+            const Template = getCurrentStandard().components.Template;
+            return <Template data={downloadingReport} isExporting={true} />;
+          })()}
         </div>
       )}
     </div>

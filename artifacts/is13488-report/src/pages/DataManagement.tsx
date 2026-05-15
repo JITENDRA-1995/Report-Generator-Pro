@@ -34,6 +34,7 @@ import {
   resetToDefaults,
 } from "@/lib/storage";
 import { v4 } from "@/lib/uuid";
+import { getCurrentStandardId } from "@/standards/registry";
 import type { Preset, StandardSpec, StandardHeaderCustomization } from "@/lib/types";
 
 export default function DataManagement() {
@@ -82,7 +83,6 @@ function NumInput({
     value === 0 || Number.isNaN(value) ? "" : String(value)
   );
 
-  // Sync internal state when external value changes (e.g. on load or clear)
   useEffect(() => {
     const valStr = value === 0 || Number.isNaN(value) ? "" : String(value);
     if (parseFloat(displayValue || "0") !== value) {
@@ -105,7 +105,6 @@ function NumInput({
 
     const parsed = parseFloat(current);
     if (!isNaN(parsed)) {
-      // Always format to requested precision
       const formatted = parsed.toFixed(precision);
       setDisplayValue(formatted);
       onChange(parsed);
@@ -114,18 +113,16 @@ function NumInput({
 
   return (
     <Input
-      type="text" // Using text to allow custom formatting control
+      type="text"
       placeholder={placeholder}
       className={className}
       value={displayValue}
       onBlur={handleBlur}
       onChange={(e) => {
         let v = e.target.value;
-        // Allow only numbers and one decimal point
         v = v.replace(/[^0-9.]/g, "");
         const parts = v.split(".");
         if (parts.length > 2) v = parts[0] + "." + parts.slice(1).join("");
-
         setDisplayValue(v);
         onChange(v === "" || v === "." ? 0 : parseFloat(v) || 0);
       }}
@@ -170,7 +167,8 @@ function PresetsTab() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `is13488_presets_${new Date().toISOString().split('T')[0]}.json`;
+    const currentId = getCurrentStandardId();
+    a.download = `${currentId}_presets_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -374,6 +372,12 @@ function PresetEditor({
   onCancel: () => void;
   onSave: (p: Preset) => void;
 }) {
+  const currentId = getCurrentStandardId();
+  const is13488 = currentId === "is13488";
+  const is13487 = currentId === "is13487";
+  const is14483 = currentId === "is14483";
+  const showDischargeFlow = is13488 || is13487;
+  const isEmitterBase = is13487; // Only 13487 is emitter based for now
   const [p, setP] = useState<Preset>(preset);
 
   const upd = <K extends keyof Preset>(k: K, v: Preset[K]) => setP(prev => ({ ...prev, [k]: v }));
@@ -385,387 +389,281 @@ function PresetEditor({
       </div>
 
       <Card className="p-6 space-y-4">
-        <h3 className="font-semibold">Basic</h3>
+        <h3 className="font-semibold">Basic Details</h3>
         <div className="grid md:grid-cols-3 gap-4">
           <div>
             <Label className="text-xs">Preset Name</Label>
-            <Input value={p.name} placeholder="e.g. 16 mm Class 2.5 - 2 LPH" onChange={(e) => upd("name", e.target.value)} />
+            <Input value={p.name} placeholder="e.g. 4 LPH On-Line" onChange={(e) => upd("name", e.target.value)} />
           </div>
           <div>
-            <Label className="text-xs">Size</Label>
-            <Input value={p.size} placeholder="e.g. 16 mm" onChange={(e) => upd("size", e.target.value)} />
+            <Label className="text-xs">{!isEmitterBase ? "Size" : "Brand"}</Label>
+            <Input value={!isEmitterBase ? p.size : p.className} placeholder={!isEmitterBase ? "e.g. 16 mm" : "e.g. PARAGON"} onChange={(e) => upd(!isEmitterBase ? "size" : "className", e.target.value)} />
           </div>
-          <div>
-            <Label className="text-xs">Class</Label>
-            <Input value={p.className} placeholder="e.g. 2.5" onChange={(e) => upd("className", e.target.value)} />
-          </div>
+          {isEmitterBase && (
+            <div>
+              <Label className="text-xs">Size (LPH)</Label>
+              <Input value={p.size} placeholder="e.g. 4 LPH" onChange={(e) => upd("size", e.target.value)} />
+            </div>
+          )}
+          {!isEmitterBase && (
+            <div>
+              <Label className="text-xs">Class</Label>
+              <Input value={p.className} placeholder="e.g. 2.5" onChange={(e) => upd("className", e.target.value)} />
+            </div>
+          )}
           <div>
             <Label className="text-xs">Category</Label>
             <Input value={p.category} placeholder="e.g. B, Unregulated" onChange={(e) => upd("category", e.target.value)} />
           </div>
           <div>
-            <Label className="text-xs">Discharge (LPH)</Label>
-            <NumInput value={p.discharge} placeholder="e.g. 2" onChange={(v) => upd("discharge", v)} />
+            <Label className="text-xs">{!isEmitterBase ? "Discharge (LPH)" : "Nominal Pressure"}</Label>
+            <NumInput value={p.discharge} placeholder="e.g. 1.0" onChange={(v) => upd("discharge", v)} />
           </div>
-          <div>
-            <Label className="text-xs">Specimen Length (mm) — Sr No 7 & 10</Label>
-            <NumInput value={p.specimenLength} placeholder="e.g. 150" onChange={(v) => upd("specimenLength", v)} />
-          </div>
-          <div>
-            <Label className="text-xs">Applied Load (KN) — Sr No 8 & 13</Label>
-            <NumInput value={p.appliedLoad} placeholder="e.g. 0.06" onChange={(v) => upd("appliedLoad", v)} />
-          </div>
-          <div>
-            <Label className="text-xs">Length Before Test (mm) — Sr No 13</Label>
-            <NumInput value={p.lengthBeforeTest ?? 150} placeholder="e.g. 150" onChange={(v) => upd("lengthBeforeTest", v)} />
-          </div>
-        </div>
-      </Card>
-      <Card className="p-6 space-y-4">
-        <h3 className="font-semibold">Carbon Content Limits (Sr No 3)</h3>
-        <div className="space-y-4">
-          <div className="space-y-2 border p-3 rounded bg-slate-50/50">
-            <div className="flex justify-between items-center mb-2">
-              <Label className="text-xs font-semibold">Crucible Weights (gm)</Label>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  const arr = p.carbonCrucibleWeights || [p.carbonCrucibleWeight];
-                  upd("carbonCrucibleWeights", [...arr, { value: 20, min: 19.5, max: 20.5 }]);
-                }}
-              >
-                <Plus className="w-3 h-3 mr-1" /> Add Option
-              </Button>
-            </div>
-            {(p.carbonCrucibleWeights || [p.carbonCrucibleWeight]).map((wt, i) => (
-              <div key={i} className="flex gap-2 items-center">
-                <div className="flex-1">
-                  <ValRangeRow
-                    label={`Option ${i + 1}`}
-                    unit="gm"
-                    precision={4}
-                    min={wt.min}
-                    max={wt.max}
-                    onChange={(min, max) => {
-                      const arr = [...(p.carbonCrucibleWeights || [p.carbonCrucibleWeight])];
-                      arr[i] = { value: (min + max) / 2, min, max };
-                      upd("carbonCrucibleWeights", arr);
-                      if (i === 0) upd("carbonCrucibleWeight", arr[0]); // fallback
-                    }}
-                  />
-                </div>
-                {(p.carbonCrucibleWeights?.length || 1) > 1 && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      const arr = (p.carbonCrucibleWeights || [p.carbonCrucibleWeight]).filter((_, j) => j !== i);
-                      upd("carbonCrucibleWeights", arr);
-                      if (i === 0) upd("carbonCrucibleWeight", arr[0]);
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                )}
+          {!isEmitterBase && (
+            <>
+              <div>
+                <Label className="text-xs">Specimen Length (mm) — Sr No 7 & 10</Label>
+                <NumInput value={p.specimenLength} placeholder="e.g. 150" onChange={(v) => upd("specimenLength", v)} />
               </div>
-            ))}
-          </div>
-          <ValRangeRow
-            label="Sample Weight (gm)"
-            unit="gm"
-            precision={4}
-            min={p.carbonSampleWeight.min}
-            max={p.carbonSampleWeight.max}
-            onChange={(min, max) => upd("carbonSampleWeight", { value: (min + max) / 2, min, max })}
-          />
-          <ValRangeRow
-            label="Carbon Percentage (%)"
-            unit="%"
-            min={p.carbonPercentage.min}
-            max={p.carbonPercentage.max}
-            onChange={(min, max) => upd("carbonPercentage", { value: (min + max) / 2, min, max })}
-          />
+              <div>
+                <Label className="text-xs">Applied Load (KN) — Sr No 8 & 13</Label>
+                <NumInput value={p.appliedLoad} placeholder="e.g. 0.06" onChange={(v) => upd("appliedLoad", v)} />
+              </div>
+              <div>
+                <Label className="text-xs">Length Before Test (mm) — Sr No 13</Label>
+                <NumInput value={p.lengthBeforeTest ?? 150} placeholder="e.g. 150" onChange={(v) => upd("lengthBeforeTest", v)} />
+              </div>
+            </>
+          )}
         </div>
       </Card>
 
-
-      <Card className="p-6 space-y-4">
-        <h3 className="font-semibold">Limits — allowed minimum, allowed maximum</h3>
-        <ValRangeRow
-          label="Min. Flow Path"
-          unit="mm"
-          min={p.minFlowPath.min}
-          max={p.minFlowPath.max}
-          onChange={(min, max) => upd("minFlowPath", { value: min, min, max })}
-        />
-        <ValRangeRow
-          label="Inside Diameter (ID)"
-          unit="mm"
-          min={p.insideDiameter.min}
-          max={p.insideDiameter.max}
-          onChange={(min, max) => upd("insideDiameter", { value: min, min, max })}
-        />
-        <ValRangeRow
-          label="Wall Thickness"
-          unit="mm"
-          min={p.wallThickness.min}
-          max={p.wallThickness.max}
-          onChange={(min, max) => upd("wallThickness", { value: min, min, max })}
-        />
-      </Card>
-
-      <Card className="p-6 space-y-3">
-        <div className="flex justify-between items-center">
-          <h3 className="font-semibold">Declared Discharge per Pressure (LPH)</h3>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              upd("declaredDischargePerPressure", [
-                ...p.declaredDischargePerPressure,
-                { pressure: 0, discharge: 0, min: 0, max: 0, r3Min: 0, r3Max: 0, r12Min: 0, r12Max: 0, r13Min: 0, r13Max: 0, r23Min: 0, r23Max: 0 },
-              ])
-            }
-          >
-            <Plus className="w-4 h-4 mr-1" /> Add Row
-          </Button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full border text-sm min-w-[1000px]">
-            <thead>
-              <tr className="bg-muted">
-                <th className="border p-2" rowSpan={2}>Pressure (kg/sq.cm)</th>
-                <th className="border p-2" rowSpan={2}>Discharge (LPH)</th>
-                <th className="border p-2" colSpan={2}>Allowed (LPH)</th>
-                <th className="border p-2" colSpan={2}>#3 (ml)</th>
-                <th className="border p-2" colSpan={2}>#12 (ml)</th>
-                <th className="border p-2" colSpan={2}>#13 (ml)</th>
-                <th className="border p-2" colSpan={2}>#23 (ml)</th>
-                <th className="border p-2 w-12" rowSpan={2}></th>
-              </tr>
-              <tr className="bg-muted text-xs">
-                <th className="border p-1">Min</th>
-                <th className="border p-1">Max</th>
-                <th className="border p-1">Min</th>
-                <th className="border p-1">Max</th>
-                <th className="border p-1">Min</th>
-                <th className="border p-1">Max</th>
-                <th className="border p-1">Min</th>
-                <th className="border p-1">Max</th>
-                <th className="border p-1">Min</th>
-                <th className="border p-1">Max</th>
-              </tr>
-            </thead>
-            <tbody>
-              {p.declaredDischargePerPressure.map((row, i) => (
-                <tr key={i}>
-                  <td className="border p-1">
-                    <NumInput
-                      value={row.pressure}
-                      placeholder="pressure"
-                      onChange={(v) => {
-                        const next = [...p.declaredDischargePerPressure];
-                        next[i] = { ...row, pressure: v };
-                        upd("declaredDischargePerPressure", next);
+      {is13488 && (
+        <Card className="p-6 space-y-4">
+          <h3 className="font-semibold">Carbon Content Limits (Sr No 3)</h3>
+          <div className="space-y-4">
+            <div className="space-y-2 border p-3 rounded bg-slate-50/50">
+              <div className="flex justify-between items-center mb-2">
+                <Label className="text-xs font-semibold">Crucible Weights (gm)</Label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const arr = p.carbonCrucibleWeights || [p.carbonCrucibleWeight];
+                    upd("carbonCrucibleWeights", [...arr, { value: 20, min: 19.5, max: 20.5 }]);
+                  }}
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Add Option
+                </Button>
+              </div>
+              {(p.carbonCrucibleWeights || [p.carbonCrucibleWeight]).map((wt, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <div className="flex-1">
+                    <ValRangeRow
+                      label={`Option ${i + 1}`}
+                      unit="gm"
+                      precision={4}
+                      min={wt.min}
+                      max={wt.max}
+                      onChange={(min, max) => {
+                        const arr = [...(p.carbonCrucibleWeights || [p.carbonCrucibleWeight])];
+                        arr[i] = { value: (min + max) / 2, min, max };
+                        upd("carbonCrucibleWeights", arr);
+                        if (i === 0) upd("carbonCrucibleWeight", arr[0]);
                       }}
                     />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput
-                      value={row.discharge}
-                      placeholder="discharge"
-                      onChange={(v) => {
-                        const next = [...p.declaredDischargePerPressure];
-                        next[i] = { ...row, discharge: v };
-                        upd("declaredDischargePerPressure", next);
-                      }}
-                    />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput
-                      value={row.min}
-                      placeholder="min"
-                      onChange={(v) => {
-                        const next = [...p.declaredDischargePerPressure];
-                        next[i] = { ...row, min: v };
-                        upd("declaredDischargePerPressure", next);
-                      }}
-                    />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput
-                      value={row.max}
-                      placeholder="max"
-                      onChange={(v) => {
-                        const next = [...p.declaredDischargePerPressure];
-                        next[i] = { ...row, max: v };
-                        upd("declaredDischargePerPressure", next);
-                      }}
-                    />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput value={row.r3Min ?? 0} placeholder="min" onChange={(v) => {
-                      const next = [...p.declaredDischargePerPressure];
-                      next[i] = { ...row, r3Min: v };
-                      upd("declaredDischargePerPressure", next);
-                    }} />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput value={row.r3Max ?? 0} placeholder="max" onChange={(v) => {
-                      const next = [...p.declaredDischargePerPressure];
-                      next[i] = { ...row, r3Max: v };
-                      upd("declaredDischargePerPressure", next);
-                    }} />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput value={row.r12Min ?? 0} placeholder="min" onChange={(v) => {
-                      const next = [...p.declaredDischargePerPressure];
-                      next[i] = { ...row, r12Min: v };
-                      upd("declaredDischargePerPressure", next);
-                    }} />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput value={row.r12Max ?? 0} placeholder="max" onChange={(v) => {
-                      const next = [...p.declaredDischargePerPressure];
-                      next[i] = { ...row, r12Max: v };
-                      upd("declaredDischargePerPressure", next);
-                    }} />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput value={row.r13Min ?? 0} placeholder="min" onChange={(v) => {
-                      const next = [...p.declaredDischargePerPressure];
-                      next[i] = { ...row, r13Min: v };
-                      upd("declaredDischargePerPressure", next);
-                    }} />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput value={row.r13Max ?? 0} placeholder="max" onChange={(v) => {
-                      const next = [...p.declaredDischargePerPressure];
-                      next[i] = { ...row, r13Max: v };
-                      upd("declaredDischargePerPressure", next);
-                    }} />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput value={row.r23Min ?? 0} placeholder="min" onChange={(v) => {
-                      const next = [...p.declaredDischargePerPressure];
-                      next[i] = { ...row, r23Min: v };
-                      upd("declaredDischargePerPressure", next);
-                    }} />
-                  </td>
-                  <td className="border p-1">
-                    <NumInput value={row.r23Max ?? 0} placeholder="max" onChange={(v) => {
-                      const next = [...p.declaredDischargePerPressure];
-                      next[i] = { ...row, r23Max: v };
-                      upd("declaredDischargePerPressure", next);
-                    }} />
-                  </td>
-                  <td className="border p-1 text-center">
+                  </div>
+                  {(p.carbonCrucibleWeights?.length || 1) > 1 && (
                     <Button
                       size="icon"
                       variant="ghost"
-                      onClick={() =>
-                        upd(
-                          "declaredDischargePerPressure",
-                          p.declaredDischargePerPressure.filter((_, j) => j !== i),
-                        )
-                      }
+                      onClick={() => {
+                        const arr = (p.carbonCrucibleWeights || [p.carbonCrucibleWeight]).filter((_, j) => j !== i);
+                        upd("carbonCrucibleWeights", arr);
+                        if (i === 0) upd("carbonCrucibleWeight", arr[0]);
+                      }}
                     >
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
-                  </td>
-                </tr>
+                  )}
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+            </div>
+            <ValRangeRow
+              label="Sample Weight (gm)"
+              unit="gm"
+              precision={4}
+              min={p.carbonSampleWeight.min}
+              max={p.carbonSampleWeight.max}
+              onChange={(min, max) => upd("carbonSampleWeight", { value: (min + max) / 2, min, max })}
+            />
+            <ValRangeRow
+              label="Carbon Percentage (%)"
+              unit="%"
+              min={p.carbonPercentage.min}
+              max={p.carbonPercentage.max}
+              onChange={(min, max) => upd("carbonPercentage", { value: (min + max) / 2, min, max })}
+            />
+          </div>
+        </Card>
+      )}
 
-      <Card className="p-6 space-y-3">
-        <div className="flex justify-between items-center">
-          <h3 className="font-semibold">Spacing Options (cm)</h3>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => upd("spacings", [...p.spacings, { id: v4(), value: 0, min: 0, max: 0 }])}
-          >
-            <Plus className="w-4 h-4 mr-1" /> Add Spacing
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          When creating a new report the user will see a dropdown of these spacings.
-        </p>
-        <table className="w-full border text-sm">
-          <thead>
-            <tr className="bg-muted">
-              <th className="border p-2">Spacing (cm)</th>
-              <th className="border p-2">Allowed Min (cm)</th>
-              <th className="border p-2">Allowed Max (cm)</th>
-              <th className="border p-2 w-12"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {p.spacings.map((s, i) => (
-              <tr key={s.id}>
-                <td className="border p-1">
-                  <NumInput
-                    value={s.value}
-                    placeholder="value"
-                    onChange={(v) => {
-                      const next = [...p.spacings];
-                      next[i] = { ...s, value: v };
-                      upd("spacings", next);
-                    }}
+      {showDischargeFlow && (
+        <>
+          <Card className="p-6 space-y-4">
+            <h3 className="font-semibold">Limits — allowed minimum, allowed maximum</h3>
+            <div className="space-y-4">
+              <ValRangeRow
+                label="Min. Flow Path"
+                unit="mm"
+                min={p.minFlowPath.min}
+                max={p.minFlowPath.max}
+                onChange={(min, max) => upd("minFlowPath", { value: min, min, max })}
+              />
+              <ValRangeRow
+                label="Declared Flow Path"
+                unit="mm"
+                min={p.declaredFlowPath?.min ?? 0.6}
+                max={p.declaredFlowPath?.max ?? 0.85}
+                onChange={(min, max) => upd("declaredFlowPath", { value: (min + max) / 2, min, max })}
+              />
+              {is13488 && (
+                <>
+                  <ValRangeRow
+                    label="Inside Diameter (ID)"
+                    unit="mm"
+                    min={p.insideDiameter.min}
+                    max={p.insideDiameter.max}
+                    onChange={(min, max) => upd("insideDiameter", { value: min, min, max })}
                   />
-                </td>
-                <td className="border p-1">
-                  <NumInput
-                    value={s.min}
-                    placeholder="min"
-                    onChange={(v) => {
-                      const next = [...p.spacings];
-                      next[i] = { ...s, min: v };
-                      upd("spacings", next);
-                    }}
+                  <ValRangeRow
+                    label="Wall Thickness"
+                    unit="mm"
+                    min={p.wallThickness.min}
+                    max={p.wallThickness.max}
+                    onChange={(min, max) => upd("wallThickness", { value: min, min, max })}
                   />
-                </td>
-                <td className="border p-1">
-                  <NumInput
-                    value={s.max}
-                    placeholder="max"
-                    onChange={(v) => {
-                      const next = [...p.spacings];
-                      next[i] = { ...s, max: v };
-                      upd("spacings", next);
-                    }}
-                  />
-                </td>
-                <td className="border p-1 text-center">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => upd("spacings", p.spacings.filter((_, j) => j !== i))}
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+                </>
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 space-y-3">
+            <div className="flex justify-between items-center">
+              <h3 className="font-semibold">Declared Discharge per Pressure (LPH)</h3>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  upd("declaredDischargePerPressure", [
+                    ...p.declaredDischargePerPressure,
+                    { pressure: 0, discharge: 0, min: 0, max: 0, r3Min: 0, r3Max: 0, r12Min: 0, r12Max: 0, r13Min: 0, r13Max: 0, r23Min: 0, r23Max: 0 },
+                  ])
+                }
+              >
+                <Plus className="w-4 h-4 mr-1" /> Add Row
+              </Button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border text-sm min-w-[1000px]">
+                <thead>
+                  <tr className="bg-muted">
+                    <th className="border p-2" rowSpan={2}>Pressure (kg/sq.cm)</th>
+                    <th className="border p-2" rowSpan={2}>Discharge (LPH)</th>
+                    <th className="border p-2" colSpan={2}>Allowed (LPH)</th>
+                    <th className="border p-2" colSpan={2}>#3 (ml)</th>
+                    <th className="border p-2" colSpan={2}>#12 (ml)</th>
+                    <th className="border p-2" colSpan={2}>#13 (ml)</th>
+                    <th className="border p-2" colSpan={2}>#23 (ml)</th>
+                    <th className="border p-2 w-12" rowSpan={2}></th>
+                  </tr>
+                  <tr className="bg-muted text-xs">
+                    <th className="border p-1">Min</th>
+                    <th className="border p-1">Max</th>
+                    <th className="border p-1">Min</th>
+                    <th className="border p-1">Max</th>
+                    <th className="border p-1">Min</th>
+                    <th className="border p-1">Max</th>
+                    <th className="border p-1">Min</th>
+                    <th className="border p-1">Max</th>
+                    <th className="border p-1">Min</th>
+                    <th className="border p-1">Max</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {p.declaredDischargePerPressure.map((row, i) => (
+                    <tr key={i}>
+                      <td className="border p-1"><NumInput value={row.pressure} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, pressure: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.discharge} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, discharge: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.min} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, min: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.max} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, max: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.r3Min ?? 0} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, r3Min: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.r3Max ?? 0} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, r3Max: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.r12Min ?? 0} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, r12Min: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.r12Max ?? 0} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, r12Max: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.r13Min ?? 0} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, r13Min: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.r13Max ?? 0} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, r13Max: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.r23Min ?? 0} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, r23Min: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1"><NumInput value={row.r23Max ?? 0} onChange={(v) => { const next = [...p.declaredDischargePerPressure]; next[i] = { ...row, r23Max: v }; upd("declaredDischargePerPressure", next); }} /></td>
+                      <td className="border p-1 text-center">
+                        <Button size="icon" variant="ghost" onClick={() => upd("declaredDischargePerPressure", p.declaredDischargePerPressure.filter((_, j) => j !== i))}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {is13488 && (
+        <Card className="p-6 space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="font-semibold">Spacing Options (cm)</h3>
+            <Button size="sm" variant="outline" onClick={() => upd("spacings", [...p.spacings, { id: v4(), value: 0, min: 0, max: 0 }])}><Plus className="w-4 h-4 mr-1" /> Add Spacing</Button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full border text-sm">
+              <thead>
+                <tr className="bg-muted">
+                  <th className="border p-2">Spacing (cm)</th>
+                  <th className="border p-2">Allowed Min (cm)</th>
+                  <th className="border p-2">Allowed Max (cm)</th>
+                  <th className="border p-2 w-12"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {p.spacings.map((s, i) => (
+                  <tr key={s.id}>
+                    <td className="border p-1"><NumInput value={s.value} onChange={(v) => { const next = [...p.spacings]; next[i] = { ...s, value: v }; upd("spacings", next); }} /></td>
+                    <td className="border p-1"><NumInput value={s.min} onChange={(v) => { const next = [...p.spacings]; next[i] = { ...s, min: v }; upd("spacings", next); }} /></td>
+                    <td className="border p-1"><NumInput value={s.max} onChange={(v) => { const next = [...p.spacings]; next[i] = { ...s, max: v }; upd("spacings", next); }} /></td>
+                    <td className="border p-1 text-center"><Button size="icon" variant="ghost" onClick={() => upd("spacings", p.spacings.filter((_, j) => j !== i))}><Trash2 className="w-4 h-4 text-destructive" /></Button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {is14483 && (
+        <Card className="p-12 border-2 border-dashed border-slate-200 bg-slate-50/50 text-center">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+              <Pencil className="w-6 h-6" />
+            </div>
+            <p className="text-slate-500 font-medium italic">Standard-specific requirement fields for IS 14483 will be added here soon.</p>
+          </div>
+        </Card>
+      )}
 
       {/* ── Bottom action bar ── */}
       <div className="sticky bottom-0 z-10 bg-white border-t shadow-md px-4 py-3 flex justify-end gap-2 rounded-b-lg">
-        <Button variant="outline" onClick={onCancel}>
-          <X className="w-4 h-4 mr-1" /> Cancel
-        </Button>
-        <Button variant="ghost" onClick={() => setP(preset)}>
-          Reset
-        </Button>
-        <Button onClick={() => onSave(p)}>
-          <Save className="w-4 h-4 mr-1" /> Save
-        </Button>
+        <Button variant="outline" onClick={onCancel}><X className="w-4 h-4 mr-1" /> Cancel</Button>
+        <Button variant="ghost" onClick={() => setP(preset)}>Reset</Button>
+        <Button onClick={() => onSave(p)}><Save className="w-4 h-4 mr-1" /> Save</Button>
       </div>
     </div>
   );
@@ -773,6 +671,8 @@ function PresetEditor({
 
 // ===================== STANDARD SPECS =====================
 function SpecsTab() {
+  const currentId = getCurrentStandardId();
+  const isEmitterBase = currentId === "is13487";
   const [specs, setSpecs] = useState<StandardSpec[]>(getSpecs());
   
   useEffect(() => {
@@ -819,7 +719,8 @@ function SpecsTab() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `is13488_specs_${new Date().toISOString().split('T')[0]}.json`;
+    const currentId = getCurrentStandardId();
+    a.download = `${currentId}_specs_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -878,13 +779,14 @@ function SpecsTab() {
           <thead>
             <tr className="bg-muted">
               <th className="border p-2">Size</th>
-              <th className="border p-2">Class</th>
+              <th className="border p-2">{!isEmitterBase ? "Class" : "Brand"}</th>
               <th className="border p-2">Discharge</th>
               <th className="border p-2">ID Min (mm)</th>
               <th className="border p-2">ID Max (mm)</th>
               <th className="border p-2">Wall Min (mm)</th>
               <th className="border p-2">Wall Max (mm)</th>
               <th className="border p-2">Flow Min (mm)</th>
+              <th className="border p-2">Flow Dec (mm)</th>
               <th className="border p-2 text-left">Notes</th>
               <th className="border p-2 w-12"></th>
             </tr>
@@ -892,7 +794,7 @@ function SpecsTab() {
           <tbody>
             {specs.length === 0 && (
               <tr>
-                <td className="border p-4 text-center text-muted-foreground" colSpan={7}>
+                <td className="border p-4 text-center text-muted-foreground" colSpan={10}>
                   No standard specifications yet.
                 </td>
               </tr>
@@ -925,9 +827,8 @@ function SpecsTab() {
                 <td className="border p-1">
                   <NumInput value={s.wallThicknessMax} placeholder="max" onChange={(v) => updateRow({ ...s, wallThicknessMax: v })} />
                 </td>
-                <td className="border p-1">
-                  <NumInput value={s.flowPathMin} placeholder="min" onChange={(v) => updateRow({ ...s, flowPathMin: v })} />
-                </td>
+                <td className="border p-1"><NumInput value={s.flowPathMin} precision={2} onChange={(v) => updateRow({ ...s, flowPathMin: v })} /></td>
+                <td className="border p-1"><NumInput value={s.declaredFlowPath || 0} precision={2} onChange={(v) => updateRow({ ...s, declaredFlowPath: v })} /></td>
                 <td className="border p-1">
                   <Input value={s.notes} placeholder="notes" onChange={(e) => updateRow({ ...s, notes: e.target.value })} />
                 </td>

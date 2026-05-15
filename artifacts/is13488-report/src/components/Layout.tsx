@@ -3,8 +3,10 @@ import { Home, FilePlus, FolderOpen, Settings, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { getCurrentStandard } from "@/standards/registry";
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const currentStandard = getCurrentStandard();
   const [location, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -51,7 +53,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-4">
             <div id="header-actions" className="flex items-center gap-2" />
             <div className="flex items-center text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-50 mr-2">
-              IS 13488 : 2008
+              {currentStandard.id.toUpperCase()}
             </div>
             <Button 
               variant="ghost" 

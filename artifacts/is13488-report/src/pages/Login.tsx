@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Lock, Mail, Loader2, ShieldCheck, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ParagonLogo } from "@/components/Logo";
+import { ParagonLogo } from "@/standards/is13488/Logo";
 
 export default function Login() {
   const [, navigate] = useLocation();

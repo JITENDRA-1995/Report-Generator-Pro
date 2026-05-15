@@ -1,20 +1,20 @@
 import type { ReportData, Preset, StandardSpec, StandardHeaderCustomization } from "./types";
 import { v4 } from "./uuid";
 import { calcExponent } from "./calc";
-import { defaultPresets, defaultSpecs } from "./seedPresets";
 import { supabase } from "./supabase";
 
-const REPORTS_KEY = "is13488_reports_v2";
-const PRESETS_KEY = "is13488_presets_v7";
-const SPECS_KEY = "is13488_specs_v1";
-const CUSTOM_HEADERS_KEY = "is13488_custom_headers_v1";
-const DEFAULT_PRESET_KEY = "is13488_default_preset_id";
+import { getCurrentStandard, getCurrentStandardId } from "@/standards/registry";
 
+const getKeys = () => getCurrentStandard().storage;
+const getDefaults = () => ({
+  presets: getCurrentStandard().defaultPresets,
+  specs: getCurrentStandard().defaultSpecs
+});
 
 // ----- Reports -----
 export function getReports(): ReportData[] {
   try {
-    const raw = localStorage.getItem(REPORTS_KEY);
+    const raw = localStorage.getItem(getKeys().reportsKey);
     if (!raw) return [];
     return JSON.parse(raw);
   } catch {
@@ -37,10 +37,10 @@ export function saveReport(r: ReportData): void {
   const idx = all.findIndex((x) => x.id === r.id);
   if (idx >= 0) all[idx] = r;
   else all.unshift(r);
-  localStorage.setItem(REPORTS_KEY, JSON.stringify(all));
+  localStorage.setItem(getKeys().reportsKey, JSON.stringify(all));
 
   // Sync to Cloud (Background)
-  supabase.from('reports').upsert({ id: r.id, data: r }, { onConflict: 'id' })
+  supabase.from('reports').upsert({ id: r.id, standard_id: getCurrentStandardId(), data: r }, { onConflict: 'id' })
     .then(res => {
       if (res.error) console.error("Cloud Save Error (Reports):", res.error);
       else console.log("Cloud Sync Success (Report saved)");
@@ -49,7 +49,8 @@ export function saveReport(r: ReportData): void {
 
 export function saveReportsBatch(reports: ReportData[]): void {
   const all = getReports();
-  const toUpsertCloud: { id: string, data: ReportData }[] = [];
+  const toUpsertCloud: { id: string, standard_id: string, data: ReportData }[] = [];
+  const standardId = getCurrentStandardId();
 
   reports.forEach(r => {
     // Stability logic for forcedM
@@ -66,10 +67,10 @@ export function saveReportsBatch(reports: ReportData[]): void {
     if (idx >= 0) all[idx] = r;
     else all.unshift(r);
 
-    toUpsertCloud.push({ id: r.id, data: r });
+    toUpsertCloud.push({ id: r.id, standard_id: standardId, data: r });
   });
 
-  localStorage.setItem(REPORTS_KEY, JSON.stringify(all));
+  localStorage.setItem(getKeys().reportsKey, JSON.stringify(all));
 
   // Sync to Cloud in one batch
   if (toUpsertCloud.length > 0) {
@@ -83,7 +84,7 @@ export function saveReportsBatch(reports: ReportData[]): void {
 
 export function deleteReport(id: string): void {
   const all = getReports().filter((r) => r.id !== id);
-  localStorage.setItem(REPORTS_KEY, JSON.stringify(all));
+  localStorage.setItem(getKeys().reportsKey, JSON.stringify(all));
   
   // Sync to Cloud (Background)
   supabase.from('reports').delete().eq('id', id)
@@ -94,7 +95,9 @@ export function deleteReport(id: string): void {
 
 export async function syncReportsFromCloud(): Promise<void> {
   try {
-    const { data, error } = await supabase.from('reports').select('data');
+    const { data, error } = await supabase.from('reports')
+      .select('data')
+      .eq('standard_id', getCurrentStandardId());
     if (error || !data || data.length === 0) return;
     
     const cloudReports = data.map(item => item.data as ReportData);
@@ -104,7 +107,7 @@ export async function syncReportsFromCloud(): Promise<void> {
     const cloudIds = new Set(cloudReports.map(r => r.id));
     const merged = [...cloudReports, ...localReports.filter(r => !cloudIds.has(r.id))];
     
-    localStorage.setItem(REPORTS_KEY, JSON.stringify(merged));
+    localStorage.setItem(getKeys().reportsKey, JSON.stringify(merged));
   } catch (e) {
     console.error("Report sync failed", e);
   }
@@ -113,22 +116,23 @@ export async function syncReportsFromCloud(): Promise<void> {
 // ----- Presets -----
 export function getPresets(): Preset[] {
   try {
-    const raw = localStorage.getItem(PRESETS_KEY);
+    const raw = localStorage.getItem(getKeys().presetsKey);
+    const defaults = getDefaults().presets;
     if (!raw) {
-      savePresets(defaultPresets);
-      if (!getDefaultPresetId() && defaultPresets.length > 0) {
-        setDefaultPresetId(defaultPresets[0].id);
+      savePresets(defaults);
+      if (!getDefaultPresetId() && defaults.length > 0) {
+        setDefaultPresetId(defaults[0].id);
       }
-      return defaultPresets;
+      return defaults;
     }
     return JSON.parse(raw);
   } catch {
-    return defaultPresets;
+    return getDefaults().presets;
   }
 }
 
 export function savePresets(list: Preset[]): void {
-  localStorage.setItem(PRESETS_KEY, JSON.stringify(list));
+  localStorage.setItem(getKeys().presetsKey, JSON.stringify(list));
 }
 
 export function upsertPreset(p: Preset): void {
@@ -139,7 +143,7 @@ export function upsertPreset(p: Preset): void {
   savePresets(all);
  
   // Sync to Cloud
-  supabase.from('presets').upsert({ id: p.id, name: p.name, data: p, is_imported: p.isImported }, { onConflict: 'id' })
+  supabase.from('presets').upsert({ id: p.id, standard_id: getCurrentStandardId(), name: p.name, data: p, is_imported: p.isImported }, { onConflict: 'id' })
     .then(res => {
       if (res.error) console.error("Cloud Save Error (Presets):", res.error);
     });
@@ -154,7 +158,9 @@ export function deletePreset(id: string): void {
 
 export async function syncPresetsFromCloud(): Promise<void> {
   try {
-    const { data, error } = await supabase.from('presets').select('data');
+    const { data, error } = await supabase.from('presets')
+      .select('data')
+      .eq('standard_id', getCurrentStandardId());
     if (error || !data || data.length === 0) return;
     
     const cloudPresets = data.map(item => item.data as Preset);
@@ -163,7 +169,7 @@ export async function syncPresetsFromCloud(): Promise<void> {
     const cloudIds = new Set(cloudPresets.map(p => p.id));
     const merged = [...cloudPresets, ...localPresets.filter(p => !cloudIds.has(p.id))];
     
-    localStorage.setItem(PRESETS_KEY, JSON.stringify(merged));
+    localStorage.setItem(getKeys().presetsKey, JSON.stringify(merged));
   } catch (e) {
     console.error("Preset sync failed", e);
   }
@@ -186,11 +192,11 @@ export function getPreset(id: string): Preset | null {
 }
 
 export function getDefaultPresetId(): string {
-  return localStorage.getItem(DEFAULT_PRESET_KEY) ?? "";
+  return localStorage.getItem(getKeys().defaultPresetKey) ?? "";
 }
 
 export function setDefaultPresetId(id: string): void {
-  localStorage.setItem(DEFAULT_PRESET_KEY, id);
+  localStorage.setItem(getKeys().defaultPresetKey, id);
 }
 
 export function blankPreset(): Preset {
@@ -202,6 +208,7 @@ export function blankPreset(): Preset {
     category: "B, Unregulated",
     discharge: 0,
     minFlowPath: { value: 0, min: 0, max: 0 },
+    declaredFlowPath: { value: 0.6, min: 0.6, max: 0.85 },
     specimenLength: 150,
     lengthBeforeTest: 150,
     appliedLoad: 0,
@@ -221,19 +228,20 @@ export function blankPreset(): Preset {
 // ----- Standard Specs -----
 export function getSpecs(): StandardSpec[] {
   try {
-    const raw = localStorage.getItem(SPECS_KEY);
+    const raw = localStorage.getItem(getKeys().specsKey);
+    const defaults = getDefaults().specs;
     if (!raw) {
-      saveSpecs(defaultSpecs);
-      return defaultSpecs;
+      saveSpecs(defaults);
+      return defaults;
     }
     return JSON.parse(raw);
   } catch {
-    return defaultSpecs;
+    return getDefaults().specs;
   }
 }
 
 export function saveSpecs(list: StandardSpec[]): void {
-  localStorage.setItem(SPECS_KEY, JSON.stringify(list));
+  localStorage.setItem(getKeys().specsKey, JSON.stringify(list));
 }
 
 export function upsertSpec(s: StandardSpec): void {
@@ -244,7 +252,7 @@ export function upsertSpec(s: StandardSpec): void {
   saveSpecs(all);
  
   // Sync to Cloud
-  supabase.from('standard_specs').upsert({ id: s.id, data: s, is_imported: s.isImported }, { onConflict: 'id' })
+  supabase.from('standard_specs').upsert({ id: s.id, standard_id: getCurrentStandardId(), data: s, is_imported: s.isImported }, { onConflict: 'id' })
     .then(res => {
       if (res.error) console.error("Cloud Save Error (Specs):", res.error);
     });
@@ -259,7 +267,9 @@ export function deleteSpec(id: string): void {
  
 export async function syncSpecsFromCloud(): Promise<void> {
   try {
-    const { data, error } = await supabase.from('standard_specs').select('data');
+    const { data, error } = await supabase.from('standard_specs')
+      .select('data')
+      .eq('standard_id', getCurrentStandardId());
     if (error || !data || data.length === 0) return;
     
     const cloudSpecs = data.map(item => item.data as StandardSpec);
@@ -268,7 +278,7 @@ export async function syncSpecsFromCloud(): Promise<void> {
     const cloudIds = new Set(cloudSpecs.map(s => s.id));
     const merged = [...cloudSpecs, ...localSpecs.filter(s => !cloudIds.has(s.id))];
     
-    localStorage.setItem(SPECS_KEY, JSON.stringify(merged));
+    localStorage.setItem(getKeys().specsKey, JSON.stringify(merged));
   } catch (e) {
     console.error("Spec sync failed", e);
   }
@@ -278,12 +288,13 @@ export function importSpecs(specs: StandardSpec[]): void {
   const current = getSpecs();
   const imported = specs.map(s => ({ ...s, isImported: true }));
   const combined = [...current];
+  const standardId = getCurrentStandardId();
   imported.forEach(s => {
     const idx = combined.findIndex(x => x.id === s.id);
     if (idx >= 0) combined[idx] = s;
     else combined.push(s);
     // Sync each imported spec to cloud
-    supabase.from('standard_specs').upsert({ id: s.id, data: s, is_imported: true }).then();
+    supabase.from('standard_specs').upsert({ id: s.id, standard_id: standardId, data: s, is_imported: true }).then();
   });
   saveSpecs(combined);
 }
@@ -304,7 +315,7 @@ export function getSpecFor(size: string, className: string, discharge: string): 
 // ----- Custom Headers -----
 export function getCustomHeaders(): StandardHeaderCustomization[] {
   try {
-    const raw = localStorage.getItem(CUSTOM_HEADERS_KEY);
+    const raw = localStorage.getItem(getKeys().headersKey);
     if (!raw) return [];
     return JSON.parse(raw);
   } catch {
@@ -320,15 +331,15 @@ export function saveCustomHeader(h: StandardHeaderCustomization) {
   } else {
     all.push(h);
   }
-  localStorage.setItem(CUSTOM_HEADERS_KEY, JSON.stringify(all));
+  localStorage.setItem(getKeys().headersKey, JSON.stringify(all));
  
   // Sync to Cloud
-  supabase.from('custom_headers').upsert({ id: h.id, data: h }).then();
+  supabase.from('custom_headers').upsert({ id: h.id, standard_id: getCurrentStandardId(), data: h }).then();
 }
  
 export function removeCustomHeader(id: string) {
   const all = getCustomHeaders();
-  localStorage.setItem(CUSTOM_HEADERS_KEY, JSON.stringify(all.filter(x => x.id !== id)));
+  localStorage.setItem(getKeys().headersKey, JSON.stringify(all.filter(x => x.id !== id)));
   
   // Sync to Cloud
   supabase.from('custom_headers').delete().eq('id', id).then();
@@ -336,7 +347,9 @@ export function removeCustomHeader(id: string) {
  
 export async function syncHeadersFromCloud(): Promise<void> {
   try {
-    const { data, error } = await supabase.from('custom_headers').select('data');
+    const { data, error } = await supabase.from('custom_headers')
+      .select('data')
+      .eq('standard_id', getCurrentStandardId());
     if (error || !data || data.length === 0) return;
     
     const cloudHeaders = data.map(item => item.data as StandardHeaderCustomization);
@@ -345,7 +358,7 @@ export async function syncHeadersFromCloud(): Promise<void> {
     const cloudIds = new Set(cloudHeaders.map(h => h.id));
     const merged = [...cloudHeaders, ...localHeaders.filter(h => !cloudIds.has(h.id))];
     
-    localStorage.setItem(CUSTOM_HEADERS_KEY, JSON.stringify(merged));
+    localStorage.setItem(getKeys().headersKey, JSON.stringify(merged));
   } catch (e) {
     console.error("Header sync failed", e);
   }
@@ -356,9 +369,10 @@ export function getCustomHeaderFor(size: string, className: string): StandardHea
 }
 
 export function resetToDefaults() {
-  localStorage.setItem(PRESETS_KEY, JSON.stringify(defaultPresets));
-  localStorage.setItem(SPECS_KEY, JSON.stringify(defaultSpecs));
-  if (defaultPresets.length > 0) {
-    setDefaultPresetId(defaultPresets[0].id);
+  const defaults = getDefaults();
+  localStorage.setItem(getKeys().presetsKey, JSON.stringify(defaults.presets));
+  localStorage.setItem(getKeys().specsKey, JSON.stringify(defaults.specs));
+  if (defaults.presets.length > 0) {
+    setDefaultPresetId(defaults.presets[0].id);
   }
 }

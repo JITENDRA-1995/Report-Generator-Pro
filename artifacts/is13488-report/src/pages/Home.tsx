@@ -1,48 +1,57 @@
 import { Link } from "wouter";
-import { FilePlus, FolderOpen, Settings } from "lucide-react";
+import { FilePlus, FolderOpen, Settings, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { getCurrentStandard } from "@/standards/registry";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { StandardSelector } from "@/components/StandardSelector";
+import { Button } from "@/components/ui/button";
 
 export default function Home() {
-  const items = [
-    {
-      to: "/new",
-      title: "New Test Report",
-      desc: "Create a new IS 13488 emitting pipe test report.",
-      icon: FilePlus,
-      color: "bg-emerald-50 text-emerald-700",
-    },
-    {
-      to: "/saved",
-      title: "View Saved Reports",
-      desc: "Browse, re-print or export previously saved reports.",
-      icon: FolderOpen,
-      color: "bg-blue-50 text-blue-700",
-    },
-    {
-      to: "/data",
-      title: "Data Management",
-      desc: "Configure default sizes, classes, discharges, spacings & ranges.",
-      icon: Settings,
-      color: "bg-amber-50 text-amber-700",
-    },
-  ];
+  const currentStandard = getCurrentStandard();
+  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+
+  const items = currentStandard.homeItems;
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-6 py-12">
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-foreground">IS 13488 Test Report Generator</h1>
-          <p className="text-muted-foreground mt-2">Emitting Pipe (IS 13488:2008) — quality test report system</p>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold mb-4 uppercase tracking-wider">
+            Active Standard: {currentStandard.fullName}
+          </div>
+          <h1 className="text-4xl font-extrabold text-foreground tracking-tight">Report Generator Pro</h1>
+          <p className="text-muted-foreground mt-2 max-w-xl mx-auto">
+            Professional quality test report management system for industrial standards.
+          </p>
+          
+          <div className="mt-6 flex justify-center">
+            <Dialog open={isSelectorOpen} onOpenChange={setIsSelectorOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="rounded-full px-6">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Switch Standard
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Select Industrial Standard</DialogTitle>
+                </DialogHeader>
+                <StandardSelector onSelect={() => setIsSelectorOpen(false)} />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {items.map((it) => (
             <Link key={it.to} href={it.to}>
-              <Card className="cursor-pointer p-6 hover-elevate active-elevate-2 h-full">
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 ${it.color}`}>
-                  <it.icon className="w-6 h-6" />
+              <Card className="cursor-pointer p-8 hover-elevate active-elevate-2 h-full transition-all hover:shadow-xl border-2 hover:border-emerald-500/20">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-sm ${it.color}`}>
+                  <it.icon className="w-7 h-7" />
                 </div>
-                <h2 className="text-lg font-semibold mb-1">{it.title}</h2>
-                <p className="text-sm text-muted-foreground">{it.desc}</p>
+                <h2 className="text-xl font-bold mb-2">{it.title}</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">{it.desc}</p>
               </Card>
             </Link>
           ))}
