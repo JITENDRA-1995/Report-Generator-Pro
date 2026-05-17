@@ -24,7 +24,8 @@ export function getReports(): ReportData[] {
 
 export function saveReport(r: ReportData): void {
   // Ensure forcedM is stable if calculation exceeds 0.50
-  const exp = calcExponent(r.pressureTest);
+  const isIs13487 = r.basicInfo.formatNo === "QC/F/13487";
+  const exp = calcExponent(r.pressureTest, isIs13487);
   if (exp.m >= 0.50 && !r.forcedM) {
     const seed = r.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const pseudoRandom = Math.abs(Math.sin(seed)); 
@@ -54,7 +55,8 @@ export function saveReportsBatch(reports: ReportData[]): void {
 
   reports.forEach(r => {
     // Stability logic for forcedM
-    const exp = calcExponent(r.pressureTest);
+    const isIs13487 = r.basicInfo.formatNo === "QC/F/13487";
+    const exp = calcExponent(r.pressureTest, isIs13487);
     if (exp.m >= 0.50 && !r.forcedM) {
       const seed = r.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
       const pseudoRandom = Math.abs(Math.sin(seed)); 
@@ -116,6 +118,13 @@ export async function syncReportsFromCloud(): Promise<void> {
 // ----- Presets -----
 export function getPresets(): Preset[] {
   try {
+    const versionKey = "presets_version_v3";
+    if (localStorage.getItem(versionKey) !== "true") {
+      localStorage.removeItem("presets_is13487");
+      localStorage.removeItem("presets_is13488");
+      localStorage.setItem(versionKey, "true");
+    }
+
     const raw = localStorage.getItem(getKeys().presetsKey);
     const defaults = getDefaults().presets;
     if (!raw) {
