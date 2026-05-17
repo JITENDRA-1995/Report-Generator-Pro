@@ -404,7 +404,7 @@ export const defaultPresets: Preset[] = [
         "r3Max": 1520,
         "r12Min": 1520,
         "r12Max": 1550,
-        "r13Min": 120,
+        "r13Min": 1520,
         "r13Max": 1550,
         "r23Min": 1560,
         "r23Max": 1700

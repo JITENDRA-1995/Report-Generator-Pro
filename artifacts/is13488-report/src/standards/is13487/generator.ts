@@ -98,8 +98,8 @@ export function generateRandomReport(preset: Preset, spacingId: string, override
       q = manualValues[i];
     }
     
-    // 2. Determine target ml for collection time (360s = LPH * 100)
-    const mlTarget = q * 100;
+    // 2. Determine target ml for 180s collection time (LPH * 50)
+    const mlTarget = q * 50;
     
     // 3. Generate 4 readings respecting sample-specific bounds if available
     const readings = [0, 1, 2, 3].map(readingIdx => {
@@ -117,18 +117,22 @@ export function generateRandomReport(preset: Preset, spacingId: string, override
         ][readingIdx];
 
         if (sampleBounds?.min !== undefined && sampleBounds?.max !== undefined) {
-          rMin = sampleBounds.min;
-          rMax = sampleBounds.max;
+          // Preset ranges are entered for 360s collection time, so divide by 2 to get 180s readings!
+          rMin = sampleBounds.min / 2;
+          rMax = sampleBounds.max / 2;
         } else if (dp.min !== undefined && dp.max !== undefined) {
-          // Fallback to global pressure limits (converted to ml)
-          rMin = Math.max(rMin, dp.min * 100);
-          rMax = Math.min(rMax, dp.max * 100);
-          if (rMin >= rMax) { rMin = dp.min * 100; rMax = dp.max * 100; }
+          // Fallback to global pressure limits (converted to ml for 180s)
+          rMin = Math.max(rMin, dp.min * 50);
+          rMax = Math.min(rMax, dp.max * 50);
+          if (rMin >= rMax) { rMin = dp.min * 50; rMax = dp.max * 50; }
         }
       }
 
       return Number(randomBetween(rMin, rMax).toFixed(1));
     });
+
+    // Enforce that readings are sorted: R1 <= R2 <= R3 <= R4 (guarantees R2 <= R3)
+    readings.sort((a, b) => a - b);
 
     return {
       pressure: p,

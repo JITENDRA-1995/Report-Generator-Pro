@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { calcExponent } from "@/lib/calc";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -399,17 +400,24 @@ function ExponentStep({ data, setData }: { data: ReportData; setData: (d: Report
     const validPoints = data.pressureTest.filter(r => r.pressure > 0 && r.readings.some(v => v > 0));
     if (validPoints.length < 2) return;
 
-    const p1 = validPoints[0].pressure;
-    const avg1 = validPoints[0].readings.reduce((a, b) => a + b, 0) / validPoints[0].readings.length;
-    const q1 = avg1 / 50;
+    // Sort readings in ascending order for all rows to guarantee percentile logic
+    const sortedPressureTest = data.pressureTest.map(r => ({
+      ...r,
+      readings: [...r.readings].sort((a, b) => a - b)
+    }));
 
-    const p2 = validPoints[validPoints.length - 1].pressure;
-    const avg2 = validPoints[validPoints.length - 1].readings.reduce((a, b) => a + b, 0) / validPoints[validPoints.length - 1].readings.length;
-    const q2 = avg2 / 50;
+    const exp = calcExponent(sortedPressureTest, true);
 
-    if (p1 === p2 || q1 === 0 || q2 === 0) return;
-    const m = Math.log(q1 / q2) / Math.log(p1 / p2);
-    setData({ ...data, forcedM: Number(m.toFixed(4)) });
+    // If m was adjusted to be compliant (capped at 0.50), apply the adjusted readings
+    const adjustedPressureTest = exp.adjustedReadings
+      ? data.pressureTest.map((r, idx) => ({ ...r, readings: exp.adjustedReadings![idx] }))
+      : sortedPressureTest;
+
+    setData({ 
+      ...data, 
+      pressureTest: adjustedPressureTest,
+      forcedM: Number(exp.m.toFixed(4)) 
+    });
   };
 
   const isMValid = data.forcedM !== undefined && data.forcedM >= 0.21 && data.forcedM <= 0.49;

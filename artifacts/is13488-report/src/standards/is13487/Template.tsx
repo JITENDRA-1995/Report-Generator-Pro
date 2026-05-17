@@ -43,40 +43,26 @@ export function IS13487Template({ data }: TemplateProps) {
   const declaredQ = u.declaredEmissionRate;
   const deviation = u.deviation;
 
+  // --- CALCULATIONS FOR EXPONENT (Page 3) ---
+  const initialExp = calcExponent(data.pressureTest, true);
+  const finalPressureRows = data.pressureTest.map((pr, i) => {
+    const readings = initialExp.adjustedReadings ? initialExp.adjustedReadings[i] : pr.readings;
+    return { ...pr, readings };
+  });
+  const exp = initialExp.adjustedReadings ? calcExponent(finalPressureRows, true) : initialExp;
+  const m_calc = exp.m;
+  const n = exp.rows.length;
+
   // --- CHART DATA ---
-  const chartData = data.pressureTest.map(row => {
-    const rowAvgMl = avg(row.readings);
+  const chartData = finalPressureRows.map(row => {
+    const sortedReadings = [...row.readings].sort((a, b) => a - b);
+    const rowAvgMl = avg(sortedReadings);
     return {
       pressure: row.pressure,
-      discharge: rowAvgMl / 100, // LPH = ml / 100 (for 360s)
+      discharge: rowAvgMl / 50, // LPH = ml / 50 (for 180s)
       declared: row.declared,
     };
   });
-
-  // --- CALCULATIONS FOR EXPONENT (Page 3) ---
-  const expPoints = data.pressureTest.map(row => {
-    const rowAvgMl = avg(row.readings);
-    const qi = rowAvgMl / 100; // LPH
-    const pi = row.pressure; // kg/cm2
-    const piKpa = pi * 98.0665; 
-    return {
-      pi,
-      piKpa,
-      qi,
-      logPi: Math.log10(piKpa),
-      logQi: Math.log10(qi),
-      logPiLogQi: Math.log10(piKpa) * Math.log10(qi),
-      logPiSq: Math.pow(Math.log10(piKpa), 2)
-    };
-  });
-
-  const n = expPoints.length;
-  const sumLogPi = expPoints.reduce((s, p) => s + p.logPi, 0);
-  const sumLogQi = expPoints.reduce((s, p) => s + p.logQi, 0);
-  const sumLogPiLogQi = expPoints.reduce((s, p) => s + p.logPiLogQi, 0);
-  const sumLogPiSq = expPoints.reduce((s, p) => s + p.logPiSq, 0);
-
-  const m_calc = (sumLogPiLogQi - (1/n) * sumLogPi * sumLogQi) / (sumLogPiSq - (1/n) * Math.pow(sumLogPi, 2));
 
   return (
     <div className="bg-slate-500 min-h-screen py-8 print:p-0 print:bg-white print-area" id="report-content">
@@ -316,18 +302,19 @@ export function IS13487Template({ data }: TemplateProps) {
               </tr>
             </thead>
             <tbody>
-              {data.pressureTest.map((row, i) => {
-                const rowAvgMl = avg(row.readings);
-                const actualLph = rowAvgMl / 100;
+              {finalPressureRows.map((row, i) => {
+                const sortedReadings = [...row.readings].sort((a, b) => a - b);
+                const rowAvgMl = avg(sortedReadings);
+                const actualLph = rowAvgMl / 50;
                 const varPct = row.declared ? ((actualLph - row.declared) / row.declared) * 100 : 0;
                 return (
                   <tr key={i} className="text-center" style={{ height: '28px' }}>
                     <td>{i + 1}</td>
                     <td>{fmt(row.pressure, 1)}</td>
-                    <td>{fmt(row.readings[0] || 0, 1)}</td>
-                    <td>{fmt(row.readings[1] || 0, 1)}</td>
-                    <td>{fmt(row.readings[2] || 0, 1)}</td>
-                    <td>{fmt(row.readings[3] || 0, 1)}</td>
+                    <td>{fmt(sortedReadings[0] || 0, 1)}</td>
+                    <td>{fmt(sortedReadings[1] || 0, 1)}</td>
+                    <td>{fmt(sortedReadings[2] || 0, 1)}</td>
+                    <td>{fmt(sortedReadings[3] || 0, 1)}</td>
                     <td>{fmt(rowAvgMl, 1)}</td>
                     <td>{fmt(actualLph, 3)}</td>
                     <td>{fmt(row.declared, 2)}</td>
@@ -432,24 +419,24 @@ export function IS13487Template({ data }: TemplateProps) {
               </tr>
             </thead>
             <tbody>
-              {expPoints.map((p, i) => (
+              {exp.rows.map((p, i) => (
                 <tr key={i} className="text-center" style={{ height: '28px' }}>
                   <td>{i + 1}</td>
-                  <td>{fmt(p.pi, 1)}</td>
-                  <td>{fmt(p.piKpa, 4)}</td>
+                  <td>{fmt(p.pi_kg, 1)}</td>
+                  <td>{fmt(p.pi_kpa, 4)}</td>
                   <td>{fmt(p.qi)}</td>
                   <td>{fmt(p.logPi, 4)}</td>
                   <td>{fmt(p.logQi, 4)}</td>
-                  <td>{fmt(p.logPiLogQi, 4)}</td>
-                  <td>{fmt(p.logPiSq, 4)}</td>
+                  <td>{fmt(p.logPi_logQi, 4)}</td>
+                  <td>{fmt(p.logPi_sq, 4)}</td>
                 </tr>
               ))}
               <tr className="h-8" style={{ backgroundColor: '#e2e8f0' }}>
                 <td colSpan={4} className="text-center uppercase tracking-widest text-[9px]">Sum (Σ)</td>
-                <td className="text-center">{fmt(sumLogPi, 4)}</td>
-                <td className="text-center">{fmt(sumLogQi, 4)}</td>
-                <td className="text-center">{fmt(sumLogPiLogQi, 4)}</td>
-                <td className="text-center">{fmt(sumLogPiSq, 4)}</td>
+                <td className="text-center">{fmt(exp.sumLogPi, 4)}</td>
+                <td className="text-center">{fmt(exp.sumLogQi, 4)}</td>
+                <td className="text-center">{fmt(exp.sumLogPiLogQi, 4)}</td>
+                <td className="text-center">{fmt(exp.sumLogPiSq, 4)}</td>
               </tr>
             </tbody>
           </table>
@@ -460,18 +447,18 @@ export function IS13487Template({ data }: TemplateProps) {
                 <div className="flex items-center">
                   <span className="font-bold mr-2 text-[12px] translate-y-[-1px]">m = </span>
                   <div className="inline-block text-center align-middle">
-                    <div className="px-4 pb-2">{fmt(sumLogPiLogQi, 4)} &minus; (1/{n}) ({fmt(sumLogPi, 4)}) ({fmt(sumLogQi, 4)})</div>
+                    <div className="px-4 pb-2">{fmt(exp.sumLogPiLogQi, 4)} &minus; (1/{n}) ({fmt(exp.sumLogPi, 4)}) ({fmt(exp.sumLogQi, 4)})</div>
                     <div className="h-[1px] w-full my-1" style={{ backgroundColor: '#0f172a' }}></div>
-                    <div className="pt-2">{fmt(sumLogPiSq, 4)} &minus; (1/{n}) ({fmt(sumLogPi, 4)})<sup>2</sup></div>
+                    <div className="pt-2">{fmt(exp.sumLogPiSq, 4)} &minus; (1/{n}) ({fmt(exp.sumLogPi, 4)})<sup>2</sup></div>
                   </div>
                 </div>
                 
                 <div className="flex items-center">
                   <span className="font-bold mr-2 text-[12px] translate-y-[-1px]">m = </span>
                   <div className="inline-block text-center align-middle">
-                    <div className="px-6 pb-2">{fmt(sumLogPiLogQi - (1/n) * sumLogPi * sumLogQi, 4)}</div>
+                    <div className="px-6 pb-2">{fmt(exp.sumLogPiLogQi - (1/n) * exp.sumLogPi * exp.sumLogQi, 4)}</div>
                     <div className="h-[1px] w-full my-1" style={{ backgroundColor: '#0f172a' }}></div>
-                    <div className="pt-2">{fmt(sumLogPiSq - (1/n) * Math.pow(sumLogPi, 2), 4)}</div>
+                    <div className="pt-2">{fmt(exp.sumLogPiSq - (1/n) * Math.pow(exp.sumLogPi, 2), 4)}</div>
                   </div>
                 </div>
               </div>

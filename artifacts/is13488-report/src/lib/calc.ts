@@ -85,12 +85,15 @@ export interface ExponentCalc {
   m: number;
 }
 
-export function calcExponent(pressureRows: { pressure: number; readings: number[] }[]): ExponentCalc & { adjustedReadings?: number[][] } {
+export function calcExponent(pressureRows: { pressure: number; readings: number[] }[], isIs13487?: boolean): ExponentCalc & { adjustedReadings?: number[][] } {
   const n = pressureRows.length;
+  const divisor = isIs13487 ? 50 : 100;
   const rows: ExponentRow[] = pressureRows.map((pr, i) => {
     const pi_kg = pr.pressure;
     const pi_kpa = pi_kg * 98.0665;
-    const qi = avg(pr.readings) / 100; // readings are stored as ml (LPH × 100); convert to LPH
+    // Sort readings in ascending order to guarantee percentile logic (R1 <= R2 <= R3 <= R4)
+    const sortedReadings = [...pr.readings].sort((a, b) => a - b);
+    const qi = avg(sortedReadings) / divisor; // readings are stored as ml; convert to LPH
     const logPi = pi_kpa > 0 ? Math.log10(pi_kpa) : 0;
     const logQi = qi > 0 ? Math.log10(qi) : 0;
     return {
@@ -118,21 +121,16 @@ export function calcExponent(pressureRows: { pressure: number; readings: number[
   // If m > 0.5000, adjust logQi to bring m to 0.5000
   if (m > 0.5000) {
     const targetM = 0.4950 + Math.random() * 0.0049; // Slightly below 0.5000
-    // Simplified adjustment: we scale logQi values to fit the targetM slope
-    // m = [sum(logPi*logQi) - 1/n*sum(logPi)*sum(logQi)] / den
-    // We want to find new logQi' such that m' = targetM
-    // This is complex to do perfectly while keeping data realistic, so we'll 
-    // adjust the qi values proportionally to achieve the target m.
     const meanLogPi = sumLogPi / n;
     const meanLogQi = sumLogQi / n;
     
     const adjustedRows = rows.map(r => {
       const newLogQi = meanLogQi + targetM * (r.logPi - meanLogPi);
       const newQi = Math.pow(10, newLogQi);
-      // Readings are ml (LPH * 100)
-      const currentAvgReadings = avg(pressureRows[r.no - 1].readings);
-      const scale = (newQi * 100) / currentAvgReadings;
-      const newReadings = pressureRows[r.no - 1].readings.map(v => v * scale);
+      const sortedReadings = [...pressureRows[r.no - 1].readings].sort((a, b) => a - b);
+      const currentAvgReadings = avg(sortedReadings);
+      const scale = (newQi * divisor) / currentAvgReadings;
+      const newReadings = sortedReadings.map(v => v * scale).sort((a, b) => a - b);
       return { newQi, newReadings };
     });
 
