@@ -100,7 +100,7 @@ export function IS13487Template({ data }: TemplateProps) {
           <SectionHeader title="[1] MECHANICAL TESTS :" separated />
           <table className="report-table">
             <thead>
-              <tr className="bg-slate-50 uppercase text-[11px] tracking-wide">
+              <tr className="uppercase text-[11px] tracking-wide" style={{ backgroundColor: '#f8fafc' }}>
                 <th className="w-16 text-center leading-tight py-2 font-black">Sr.<br/>No</th>
                 <th className="w-48 text-center font-black">Type of Test</th>
                 <th className="w-20 text-center font-black">Clause</th>
@@ -168,9 +168,9 @@ export function IS13487Template({ data }: TemplateProps) {
                     The coefficient of variation(Cv) of the emission rate of the test sample shall not exceed 5 percent for Category A not more than 10 percent for Category B
                   </div>
                 </td>
-                <td className="p-0 align-top w-44 bg-slate-50 h-[160px]">
+                <td className="p-0 align-top w-44 h-[160px]" style={{ backgroundColor: '#f8fafc' }}>
                   <div className="h-[80px] px-4 border-b-2 border-black flex flex-col justify-center items-center">
-                    <div className="text-slate-600 text-[10px] font-bold uppercase">Mean Emission Rate</div>
+                    <div className="text-[10px] font-bold uppercase" style={{ color: '#475569' }}>Mean Emission Rate</div>
                     <div className="text-[17px] font-black leading-none mb-1">{fmt(meanQ)} LPH</div>
                     <div className="text-[13px] font-black">Dev. {fmt(deviation)} %</div>
                   </div>
@@ -243,7 +243,7 @@ export function IS13487Template({ data }: TemplateProps) {
            <SectionHeader title="[2.2] UNIFORMITY TABLE (CLAUSE 8.1 CONTINUED) :" separated />
            <table className="report-table text-[10px]">
              <thead>
-               <tr className="bg-slate-100 h-10">
+               <tr className="h-10" style={{ backgroundColor: '#f1f5f9' }}>
                  <th className="w-8">NO</th>
                  <th className="w-24">Discharge 180s (ml)</th>
                  <th className="w-20">Discharge LPH (X)</th>
@@ -274,17 +274,17 @@ export function IS13487Template({ data }: TemplateProps) {
                      <td className="">{i + 1}</td>
                      <td>{mlVal > 0 ? mlVal.toFixed(1) : ""}</td>
                      <td className="">{x > 0 ? fmt(x, 3) : ""}</td>
-                     <td className="align-middle text-center bg-slate-50">
+                     <td className="align-middle text-center" style={{ backgroundColor: '#f8fafc' }}>
                        {i === 12 ? fmt(meanQ, 3) : ""}
                      </td>
                      <td className="">{ascX > 0 ? ascSrNo : ""}</td>
-                     <td className="bg-slate-50">{ascX > 0 ? fmt(ascX, 3) : ""}</td>
+                     <td style={{ backgroundColor: '#f8fafc' }}>{ascX > 0 ? fmt(ascX, 3) : ""}</td>
                      <td>{x > 0 ? fmt(diff, 4) : ""}</td>
                      <td>{x > 0 ? fmt(diffSq, 6) : ""}</td>
-                     <td className="align-middle text-center bg-slate-50">
+                     <td className="align-middle text-center" style={{ backgroundColor: '#f8fafc' }}>
                        {i === 12 ? fmt(sq, 4) : ""}
                      </td>
-                     <td className="align-middle text-center bg-slate-50">
+                     <td className="align-middle text-center" style={{ backgroundColor: '#f8fafc' }}>
                        {i === 12 ? fmt(cv, 3) : ""}
                      </td>
                    </tr>
@@ -302,7 +302,7 @@ export function IS13487Template({ data }: TemplateProps) {
           <SectionHeader title="[2.3] EMISSION RATE AS FUNCTION OF INLET PRESSURE (CLAUSE 8.2) :" separated />
           <table className="report-table text-[10px]">
             <thead>
-              <tr className="bg-slate-100 h-12 uppercase text-[9px]">
+              <tr className="h-12 uppercase text-[9px]" style={{ backgroundColor: '#f1f5f9' }}>
                 <th className="w-10">NO</th>
                 <th className="w-20">Pressure<br/>(kg/cm²)</th>
                 <th className="w-16">R1 (3)<br/>(ml)</th>
@@ -396,7 +396,7 @@ export function IS13487Template({ data }: TemplateProps) {
                   <span className="font-bold mr-1 translate-y-[-1px]">m = </span>
                   <div className="inline-block text-center align-middle">
                     <div className="px-1 pb-1">Σ (log p<sub>i</sub>)(log q<sub>i</sub>) &minus; (1/n) (Σ log p<sub>i</sub>)(Σ log q<sub>i</sub>)</div>
-                    <div className="h-[1px] bg-slate-900 w-full my-1"></div>
+                    <div className="h-[1px] w-full my-1" style={{ backgroundColor: '#0f172a' }}></div>
                     <div className="pt-1">Σ (log p<sub>i</sub>)<sup>2</sup> &minus; (1/n) (Σ log p<sub>i</sub>)<sup>2</sup></div>
                   </div>
                 </div>
@@ -420,7 +420,7 @@ export function IS13487Template({ data }: TemplateProps) {
 
           <table className="report-table mt-2 text-[10px]">
             <thead>
-              <tr className="bg-slate-100 h-10 uppercase text-[10px]">
+              <tr className="h-10 uppercase text-[10px]" style={{ backgroundColor: '#f1f5f9' }}>
                 <th className="w-10">NO</th>
                 <th className="w-20">P<sub>i</sub> (kg/cm²)</th>
                 <th className="w-20">P<sub>i</sub> (KPa)</th>
@@ -444,7 +444,7 @@ export function IS13487Template({ data }: TemplateProps) {
                   <td>{fmt(p.logPiSq, 4)}</td>
                 </tr>
               ))}
-              <tr className="bg-slate-200 h-8">
+              <tr className="h-8" style={{ backgroundColor: '#e2e8f0' }}>
                 <td colSpan={4} className="text-center uppercase tracking-widest text-[9px]">Sum (Σ)</td>
                 <td className="text-center">{fmt(sumLogPi, 4)}</td>
                 <td className="text-center">{fmt(sumLogQi, 4)}</td>
@@ -461,7 +461,7 @@ export function IS13487Template({ data }: TemplateProps) {
                   <span className="font-bold mr-2 text-[12px] translate-y-[-1px]">m = </span>
                   <div className="inline-block text-center align-middle">
                     <div className="px-4 pb-2">{fmt(sumLogPiLogQi, 4)} &minus; (1/{n}) ({fmt(sumLogPi, 4)}) ({fmt(sumLogQi, 4)})</div>
-                    <div className="h-[1px] bg-slate-900 w-full my-1"></div>
+                    <div className="h-[1px] w-full my-1" style={{ backgroundColor: '#0f172a' }}></div>
                     <div className="pt-2">{fmt(sumLogPiSq, 4)} &minus; (1/{n}) ({fmt(sumLogPi, 4)})<sup>2</sup></div>
                   </div>
                 </div>
@@ -470,18 +470,18 @@ export function IS13487Template({ data }: TemplateProps) {
                   <span className="font-bold mr-2 text-[12px] translate-y-[-1px]">m = </span>
                   <div className="inline-block text-center align-middle">
                     <div className="px-6 pb-2">{fmt(sumLogPiLogQi - (1/n) * sumLogPi * sumLogQi, 4)}</div>
-                    <div className="h-[1px] bg-slate-900 w-full my-1"></div>
+                    <div className="h-[1px] w-full my-1" style={{ backgroundColor: '#0f172a' }}></div>
                     <div className="pt-2">{fmt(sumLogPiSq - (1/n) * Math.pow(sumLogPi, 2), 4)}</div>
                   </div>
                 </div>
               </div>
 
               <div className="flex flex-col items-center mr-10 mt-2">
-                <div className="flex items-center font-black text-2xl border-l-4 border-black pl-6 py-4 bg-slate-50 px-8">
+                <div className="flex items-center font-black text-2xl border-l-4 border-black pl-6 py-4 px-8" style={{ backgroundColor: '#f8fafc' }}>
                   <span className="mr-3">m = </span>
                   <span>{fmt(m_calc, 4)}</span>
                 </div>
-                <div className="mt-2 text-center text-[11px] font-bold text-slate-900 border-2 border-black rounded-xl p-3 bg-white shadow-sm italic">
+                <div className="mt-2 text-center text-[11px] font-bold border-2 border-black rounded-xl p-3 bg-white shadow-sm italic" style={{ color: '#0f172a' }}>
                   For turbulent flow m should be<br/>
                   0.21 to 0.50
                 </div>
@@ -496,9 +496,9 @@ export function IS13487Template({ data }: TemplateProps) {
 
 function Page({ children, pageNo }: { children: React.ReactNode, pageNo: number }) {
   return (
-    <div className="report-page w-[210mm] min-h-[297mm] p-[10mm] bg-white mx-auto mb-8 relative print:m-0 print:shadow-none print:mb-0 page-break overflow-hidden border border-slate-200">
+    <div className="report-page w-[210mm] min-h-[297mm] p-[10mm] bg-white mx-auto mb-8 relative print:m-0 print:shadow-none print:mb-0 page-break overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>
       {children}
-      <div className="absolute bottom-6 right-10 text-[11px] font-black text-slate-700 uppercase tracking-widest">
+      <div className="absolute bottom-6 right-10 text-[11px] font-black uppercase tracking-widest" style={{ color: '#334155' }}>
         Report Page {pageNo} of 3
       </div>
     </div>
@@ -513,15 +513,15 @@ function ReportHeader({ b }: { b: any }) {
       </div>
       <div className="py-1 px-2 text-center border-r-2 border-black flex flex-col justify-center bg-white">
         <div className="font-black text-2xl uppercase text-black leading-tight mb-0.5">TEST REPORT</div>
-        <div className="font-black text-[16px] uppercase tracking-wide text-slate-700">EMITTERS (IS :13487-2024)</div>
+        <div className="font-black text-[16px] uppercase tracking-wide" style={{ color: '#334155' }}>EMITTERS (IS :13487-2024)</div>
       </div>
-      <div className="flex flex-col text-[11px] bg-slate-50">
+      <div className="flex flex-col text-[11px]" style={{ backgroundColor: '#f8fafc' }}>
         <div className="h-[36px] flex items-center justify-between px-3 border-b-2 border-black">
-          <span className="font-bold text-slate-500 uppercase text-[10px] whitespace-nowrap mr-2">Size :</span>
+          <span className="font-bold uppercase text-[10px] whitespace-nowrap mr-2" style={{ color: '#64748b' }}>Size :</span>
           <span className="font-black text-black text-[13px] whitespace-nowrap">{b.size ? (b.size.toUpperCase().includes("LPH") ? b.size : `${b.size} LPH`) : ""}</span>
         </div>
         <div className="h-[36px] flex items-center justify-between px-3">
-          <span className="font-bold text-slate-500 uppercase text-[10px] whitespace-nowrap mr-2">Test Date :</span>
+          <span className="font-bold uppercase text-[10px] whitespace-nowrap mr-2" style={{ color: '#64748b' }}>Test Date :</span>
           <span className="font-black text-black text-[13px] whitespace-nowrap">{b.dateOfTest}</span>
         </div>
       </div>
@@ -534,29 +534,29 @@ function IdentityTable({ b }: { b: any }) {
     <div className="grid grid-cols-2 border-x-2 border-b-2 border-black text-[13px]">
       <div className="border-r-2 border-black">
         <div className="flex border-b-2 border-black h-7 items-center">
-          <div className="w-40 p-1 font-bold text-right pr-3 text-slate-600 uppercase text-[10px]">Date of Mfg. :</div>
+          <div className="w-40 p-1 font-bold text-right pr-3 uppercase text-[10px]" style={{ color: '#475569' }}>Date of Mfg. :</div>
           <div className="p-1 font-black text-black">{b.dateOfMfg}</div>
         </div>
         <div className="flex border-b-2 border-black h-7 items-center">
-          <div className="w-40 p-1 font-bold text-right pr-3 text-slate-600 uppercase text-[10px]">Batch No. :</div>
+          <div className="w-40 p-1 font-bold text-right pr-3 uppercase text-[10px]" style={{ color: '#475569' }}>Batch No. :</div>
           <div className="p-1 font-black text-black">{b.batchNo}</div>
         </div>
         <div className="flex h-7 items-center">
-          <div className="w-40 p-1 font-bold text-right pr-3 text-slate-600 uppercase text-[10px]">Mfg Qty.(No) :</div>
+          <div className="w-40 p-1 font-bold text-right pr-3 uppercase text-[10px]" style={{ color: '#475569' }}>Mfg Qty.(No) :</div>
           <div className="p-1 font-black text-black">{b.qtyOfProduction}</div>
         </div>
       </div>
       <div>
         <div className="flex border-b-2 border-black h-7 items-center">
-          <div className="w-48 p-1 font-bold text-right pr-3 text-slate-600 uppercase text-[10px]">Brand Name :</div>
+          <div className="w-48 p-1 font-bold text-right pr-3 uppercase text-[10px]" style={{ color: '#475569' }}>Brand Name :</div>
           <div className="p-1 font-black text-black">{b.className}</div>
         </div>
         <div className="flex border-b-2 border-black h-7 items-center">
-          <div className="w-48 p-1 font-bold text-right pr-3 text-slate-600 uppercase text-[10px]">Type & Category :</div>
+          <div className="w-48 p-1 font-bold text-right pr-3 uppercase text-[10px]" style={{ color: '#475569' }}>Type & Category :</div>
           <div className="p-1 font-black text-black">{b.category}</div>
         </div>
         <div className="flex h-7 items-center">
-          <div className="w-48 p-1 font-bold text-right pr-3 text-slate-600 uppercase text-[10px]">Nominal Test Pressure :</div>
+          <div className="w-48 p-1 font-bold text-right pr-3 uppercase text-[10px]" style={{ color: '#475569' }}>Nominal Test Pressure :</div>
           <div className="p-1 font-black text-black">{String(b.discharge).replace(/KG\/CM2/gi, '').trim()} kg/cm²</div>
         </div>
       </div>
