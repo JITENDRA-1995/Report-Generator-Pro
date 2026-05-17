@@ -23,6 +23,7 @@ interface WizardProps {
   data: ReportData;
   setData: (data: ReportData) => void;
   preset: Preset;
+  onPreview?: () => void;
 }
 
 const steps = [
@@ -255,8 +256,10 @@ function UniformityStep({ data, setData }: { data: ReportData; setData: (d: Repo
 
   const updateRow = (i: number, val: number) => {
     const next = [...data.uniformity];
-    // val is discharge in 180s
-    const lph = (val / 180) * 3600;
+    // val is discharge in 180s (ml)
+    // ml/hr = (val / 180) * 3600 = val * 20
+    // LPH = (val * 20) / 1000 = val / 50
+    const lph = val / 50;
     next[i] = { 
       ...next[i], 
       dischargeInSecs: val, 

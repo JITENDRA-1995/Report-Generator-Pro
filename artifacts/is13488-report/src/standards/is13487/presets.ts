@@ -1,0 +1,436 @@
+import type { Preset } from "@/lib/types";
+
+export const defaultPresets: Preset[] = [
+  {
+    "id": "5cbf7259-3aad-4102-bcd1-1932c5fe2828",
+    "name": "2.00 LPH",
+    "size": "2 LPH",
+    "className": "PARAGON",
+    "category": "B, Unregulated",
+    "discharge": 1,
+    "minFlowPath": {
+      "value": 0.72,
+      "min": 0.72,
+      "max": 0.95
+    },
+    "declaredFlowPath": 0.7,
+    "specimenLength": 150,
+    "lengthBeforeTest": 150,
+    "appliedLoad": 0,
+    "carbonCrucibleWeight": {
+      "value": 20,
+      "min": 19.5,
+      "max": 20.5
+    },
+    "carbonCrucibleWeights": [
+      {
+        "value": 20,
+        "min": 19.5,
+        "max": 20.5
+      }
+    ],
+    "carbonSampleWeight": {
+      "value": 0.5,
+      "min": 0.45,
+      "max": 0.55
+    },
+    "carbonPercentage": {
+      "value": 2.5,
+      "min": 2,
+      "max": 3
+    },
+    "insideDiameter": {
+      "value": 0,
+      "min": 0,
+      "max": 0
+    },
+    "wallThickness": {
+      "value": 0,
+      "min": 0,
+      "max": 0
+    },
+    "declaredDischargePerPressure": [
+      {
+        "pressure": 0.5,
+        "discharge": 1.55,
+        "min": 1.395,
+        "max": 1.7,
+        "r3Min": 140,
+        "r3Max": 145,
+        "r12Min": 147,
+        "r12Max": 153,
+        "r13Min": 147,
+        "r13Max": 153,
+        "r23Min": 155,
+        "r23Max": 170
+      },
+      {
+        "pressure": 1,
+        "discharge": 2,
+        "min": 1.8,
+        "max": 2.2,
+        "r3Min": 180,
+        "r3Max": 195,
+        "r12Min": 199,
+        "r12Max": 208,
+        "r13Min": 199,
+        "r13Max": 208,
+        "r23Min": 210,
+        "r23Max": 220
+      },
+      {
+        "pressure": 1.5,
+        "discharge": 2.48,
+        "min": 2.232,
+        "max": 2.728,
+        "r3Min": 224,
+        "r3Max": 235,
+        "r12Min": 240,
+        "r12Max": 248,
+        "r13Min": 240,
+        "r13Max": 248,
+        "r23Min": 255,
+        "r23Max": 270
+      }
+    ],
+    "spacings": [
+      {
+        "id": "c0202a31-493b-42e4-bfd7-53d2c6478069",
+        "value": 0,
+        "min": 0,
+        "max": 0
+      }
+    ]
+  },
+  {
+    "id": "54823bd9-8499-4ecc-9501-5080269f0658",
+    "name": "4.00 LPH",
+    "size": "4 LPH",
+    "className": "PARAGON",
+    "category": "B, Unregulated",
+    "discharge": 1,
+    "minFlowPath": {
+      "value": 0.82,
+      "min": 0.82,
+      "max": 1
+    },
+    "declaredFlowPath": 0.8,
+    "specimenLength": 150,
+    "lengthBeforeTest": 150,
+    "appliedLoad": 0,
+    "carbonCrucibleWeight": {
+      "value": 20,
+      "min": 19.5,
+      "max": 20.5
+    },
+    "carbonCrucibleWeights": [
+      {
+        "value": 20,
+        "min": 19.5,
+        "max": 20.5
+      }
+    ],
+    "carbonSampleWeight": {
+      "value": 0.5,
+      "min": 0.45,
+      "max": 0.55
+    },
+    "carbonPercentage": {
+      "value": 2.5,
+      "min": 2,
+      "max": 3
+    },
+    "insideDiameter": {
+      "value": 0,
+      "min": 0,
+      "max": 0
+    },
+    "wallThickness": {
+      "value": 0,
+      "min": 0,
+      "max": 0
+    },
+    "declaredDischargePerPressure": [
+      {
+        "pressure": 0.5,
+        "discharge": 3.1,
+        "min": 2.79,
+        "max": 3.41,
+        "r3Min": 280,
+        "r3Max": 295,
+        "r12Min": 300,
+        "r12Max": 312,
+        "r13Min": 300,
+        "r13Max": 312,
+        "r23Min": 320,
+        "r23Max": 341
+      },
+      {
+        "pressure": 1,
+        "discharge": 4,
+        "min": 3.6,
+        "max": 4.4,
+        "r3Min": 360,
+        "r3Max": 375,
+        "r12Min": 382,
+        "r12Max": 395,
+        "r13Min": 382,
+        "r13Max": 395,
+        "r23Min": 405,
+        "r23Max": 430
+      },
+      {
+        "pressure": 1.5,
+        "discharge": 5.02,
+        "min": 4.52,
+        "max": 5.52,
+        "r3Min": 455,
+        "r3Max": 470,
+        "r12Min": 481,
+        "r12Max": 495,
+        "r13Min": 481,
+        "r13Max": 495,
+        "r23Min": 510,
+        "r23Max": 550
+      }
+    ],
+    "spacings": [
+      {
+        "id": "f969b17b-44e9-40df-994f-aade86b2d0da",
+        "value": 0,
+        "min": 0,
+        "max": 0
+      }
+    ]
+  },
+  {
+    "id": "b3c5db27-5019-4ff6-b251-619449a713ab",
+    "name": "8.00 LPH",
+    "size": "8 LPH",
+    "className": "PARAGON",
+    "category": "B, Unregulated",
+    "discharge": 1,
+    "minFlowPath": {
+      "value": 0.85,
+      "min": 0.85,
+      "max": 1.09
+    },
+    "declaredFlowPath": 0.85,
+    "specimenLength": 150,
+    "lengthBeforeTest": 150,
+    "appliedLoad": 0,
+    "carbonCrucibleWeight": {
+      "value": 20,
+      "min": 19.5,
+      "max": 20.5
+    },
+    "carbonCrucibleWeights": [
+      {
+        "value": 20,
+        "min": 19.5,
+        "max": 20.5
+      }
+    ],
+    "carbonSampleWeight": {
+      "value": 0.5,
+      "min": 0.45,
+      "max": 0.55
+    },
+    "carbonPercentage": {
+      "value": 2.5,
+      "min": 2,
+      "max": 3
+    },
+    "insideDiameter": {
+      "value": 0,
+      "min": 0,
+      "max": 0
+    },
+    "wallThickness": {
+      "value": 0,
+      "min": 0,
+      "max": 0
+    },
+    "declaredDischargePerPressure": [
+      {
+        "pressure": 0.5,
+        "discharge": 5.8,
+        "min": 5.22,
+        "max": 6.38,
+        "r3Min": 525,
+        "r3Max": 540,
+        "r12Min": 548,
+        "r12Max": 555,
+        "r13Min": 548,
+        "r13Max": 555,
+        "r23Min": 565,
+        "r23Max": 600
+      },
+      {
+        "pressure": 1,
+        "discharge": 8,
+        "min": 7.2,
+        "max": 8.8,
+        "r3Min": 720,
+        "r3Max": 750,
+        "r12Min": 760,
+        "r12Max": 780,
+        "r13Min": 760,
+        "r13Max": 780,
+        "r23Min": 800,
+        "r23Max": 850
+      },
+      {
+        "pressure": 1.5,
+        "discharge": 9.6,
+        "min": 8.64,
+        "max": 10.56,
+        "r3Min": 864,
+        "r3Max": 892,
+        "r12Min": 905,
+        "r12Max": 935,
+        "r13Min": 905,
+        "r13Max": 938,
+        "r23Min": 950,
+        "r23Max": 1050
+      },
+      {
+        "pressure": 1.8,
+        "discharge": 10.7,
+        "min": 9.63,
+        "max": 11.77,
+        "r3Min": 970,
+        "r3Max": 995,
+        "r12Min": 1020,
+        "r12Max": 1050,
+        "r13Min": 1020,
+        "r13Max": 1050,
+        "r23Min": 1065,
+        "r23Max": 1150
+      }
+    ],
+    "spacings": [
+      {
+        "id": "fbcefb83-905c-4d4f-93d7-ccd2ce72de57",
+        "value": 0,
+        "min": 0,
+        "max": 0
+      }
+    ]
+  },
+  {
+    "id": "9198ef45-e28a-4020-8bb5-6fcb3fe76e6c",
+    "name": "14.00 LPH",
+    "size": "14 LPH",
+    "className": "PARRAGON",
+    "category": "B, Unregulated",
+    "discharge": 1,
+    "minFlowPath": {
+      "value": 2.5,
+      "min": 2.5,
+      "max": 2.8
+    },
+    "declaredFlowPath": 2.5,
+    "specimenLength": 150,
+    "lengthBeforeTest": 150,
+    "appliedLoad": 0,
+    "carbonCrucibleWeight": {
+      "value": 20,
+      "min": 19.5,
+      "max": 20.5
+    },
+    "carbonCrucibleWeights": [
+      {
+        "value": 20,
+        "min": 19.5,
+        "max": 20.5
+      }
+    ],
+    "carbonSampleWeight": {
+      "value": 0.5,
+      "min": 0.45,
+      "max": 0.55
+    },
+    "carbonPercentage": {
+      "value": 2.5,
+      "min": 2,
+      "max": 3
+    },
+    "insideDiameter": {
+      "value": 0,
+      "min": 0,
+      "max": 0
+    },
+    "wallThickness": {
+      "value": 0,
+      "min": 0,
+      "max": 0
+    },
+    "declaredDischargePerPressure": [
+      {
+        "pressure": 0.5,
+        "discharge": 9.5,
+        "min": 8.55,
+        "max": 10.45,
+        "r3Min": 855,
+        "r3Max": 880,
+        "r12Min": 895,
+        "r12Max": 920,
+        "r13Min": 895,
+        "r13Max": 920,
+        "r23Min": 940,
+        "r23Max": 1040
+      },
+      {
+        "pressure": 1,
+        "discharge": 14,
+        "min": 12.6,
+        "max": 15.4,
+        "r3Min": 1260,
+        "r3Max": 1300,
+        "r12Min": 1300,
+        "r12Max": 1350,
+        "r13Min": 1300,
+        "r13Max": 1350,
+        "r23Min": 1360,
+        "r23Max": 1480
+      },
+      {
+        "pressure": 1.5,
+        "discharge": 16.4,
+        "min": 14.76,
+        "max": 18.04,
+        "r3Min": 1480,
+        "r3Max": 1520,
+        "r12Min": 1520,
+        "r12Max": 1550,
+        "r13Min": 120,
+        "r13Max": 1550,
+        "r23Min": 1560,
+        "r23Max": 1700
+      },
+      {
+        "pressure": 1.8,
+        "discharge": 17.5,
+        "min": 15.75,
+        "max": 19.25,
+        "r3Min": 1575,
+        "r3Max": 1625,
+        "r12Min": 1625,
+        "r12Max": 1680,
+        "r13Min": 1625,
+        "r13Max": 1680,
+        "r23Min": 1680,
+        "r23Max": 1790
+      }
+    ],
+    "spacings": [
+      {
+        "id": "b2c0ff6c-07fa-4959-9be3-0a7ee5a168e1",
+        "value": 0,
+        "min": 0,
+        "max": 0
+      }
+    ]
+  }
+];

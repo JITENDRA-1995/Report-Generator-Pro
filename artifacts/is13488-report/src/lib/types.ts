@@ -134,7 +134,7 @@ export interface Preset {
   category: string;
   discharge: number;
   minFlowPath: ValRange;
-  declaredFlowPath?: ValRange;
+  declaredFlowPath?: number;
   specimenLength: number;
   lengthBeforeTest: number;
   appliedLoad: number;

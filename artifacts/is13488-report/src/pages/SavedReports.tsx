@@ -24,6 +24,17 @@ import { HeaderActions } from "@/components/HeaderActions";
 // JSZip removed as requested
 
 export default function SavedReports() {
+  const getReportFilename = (r: ReportData): string => {
+    const is13487 = r.basicInfo.formatNo?.includes("13487");
+    let filename = `${r.basicInfo.mcNo}_${r.basicInfo.batchNo}`;
+    if (is13487) {
+      const size = r.basicInfo.size || "";
+      const sizeClean = size.toUpperCase().replace(/\s*LPH\s*/i, "").trim();
+      filename = `${sizeClean} LPH ${r.basicInfo.batchNo}`;
+    }
+    return filename.replace(/[\/\\?%*:|"<>]/g, '-');
+  };
+
   const [, navigate] = useLocation();
   const [reports, setReports] = useState<ReportData[]>(getReports());
   const [viewing, setViewing] = useState<ReportData | null>(null);
@@ -142,7 +153,7 @@ export default function SavedReports() {
     setIsExporting(true);
     try {
       const blob = await exportPDFBlob(r);
-      const filename = `${r.basicInfo.mcNo}_${r.basicInfo.batchNo}`.replace(/[\/\\?%*:|"<>]/g, '-');
+      const filename = getReportFilename(r);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -179,7 +190,7 @@ export default function SavedReports() {
         
         setBatchProgress(prev => ({ ...prev, current: i + 1 }));
         const blob = await exportPDFBlob(r);
-        const filename = `${r.basicInfo.mcNo}_${r.basicInfo.batchNo}`.replace(/[\/\\?%*:|"<>]/g, '-');
+        const filename = getReportFilename(r);
         
         // Trigger individual download
         const url = URL.createObjectURL(blob);
@@ -205,7 +216,7 @@ export default function SavedReports() {
   };
 
   if (viewing) {
-    const filename = `${viewing.basicInfo.mcNo}_${viewing.basicInfo.batchNo}`.replace(/[\/\\?%*:|"<>]/g, '-');
+    const filename = getReportFilename(viewing);
     
     const handlePrint = () => {
       const oldTitle = document.title;

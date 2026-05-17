@@ -41,7 +41,7 @@ export function emptyReport(preset: Preset, spacingId: string, overrides: Partia
       declaredMin: preset.minFlowPath?.min || 0, 
       declared: preset.minFlowPath?.value || 0,
       minLimit: preset.minFlowPath?.min || 0,
-      declaredLimit: preset.declaredFlowPath?.min || 0.8
+      declaredLimit: typeof preset.declaredFlowPath === 'object' ? (preset.declaredFlowPath as any)?.value ?? 0.8 : preset.declaredFlowPath ?? 0.8
     },
     spacing: { values: [], declared: 0 },
     envCracking: { results: ["PASSED"] },
@@ -61,7 +61,7 @@ export function generateRandomReport(preset: Preset, spacingId: string, override
   // 1. Flow Path auto-fill between limits
   const fpMin = preset.minFlowPath?.min || 0.6;
   const fpMax = preset.minFlowPath?.max || 1.2;
-  const declaredFp = preset.declaredFlowPath?.min || 0.8;
+  const declaredFp = typeof preset.declaredFlowPath === 'object' ? (preset.declaredFlowPath as any)?.value ?? 0.8 : preset.declaredFlowPath ?? 0.8;
   report.flowPath.minLimit = fpMin;
   report.flowPath.declaredLimit = declaredFp;
   report.flowPath.values = Array.from({ length: 4 }, () => randomBetween(fpMin, fpMax));
@@ -85,19 +85,50 @@ export function generateRandomReport(preset: Preset, spacingId: string, override
     : [0.4, 0.6, 0.8, 1.0, 1.2, 1.4];
 
   report.pressureTest = pressures.map((p: number, i: number) => {
-    let q = qBase * Math.pow(p, targetM);
-    if (p === 1.0) q = qBase; // Keep 1.00 KG fixed
+    const dp = preset.declaredDischargePerPressure?.find(d => d.pressure === p);
     
-    // Override with manual values if available (manual values are LPH)
+    // 1. Determine the "Declared" LPH for this pressure
+    // Priority: Preset's specific discharge > Preset's specific value (legacy) > Average of preset limits > Formula-based value
+    let q = dp?.discharge || (dp as any)?.value || (dp?.min && dp?.max ? (dp.min + dp.max) / 2 : qBase * Math.pow(p, targetM));
+    
+    if (p === 1.0 && !dp?.discharge && !(dp as any)?.value && !(dp?.min && dp?.max)) q = qBase;
+    
+    // Override with manual values if available
     if (manualValues && manualValues[i] !== undefined) {
       q = manualValues[i];
     }
     
-    // Convert LPH to ml (ml = LPH * 50) — assuming 180s collection
-    const mlTarget = q * 50;
+    // 2. Determine target ml for collection time (360s = LPH * 100)
+    const mlTarget = q * 100;
     
-    // Generate 4 readings around mlTarget
-    const readings = Array.from({ length: 4 }, () => Number((randomBetween(mlTarget * 0.98, mlTarget * 1.02)).toFixed(1)));
+    // 3. Generate 4 readings respecting sample-specific bounds if available
+    const readings = [0, 1, 2, 3].map(readingIdx => {
+      let rMin = mlTarget * 0.98;
+      let rMax = mlTarget * 1.02;
+
+      if (dp) {
+        // Map reading index to sample-specific properties in the preset
+        // R1->#3, R2->#12, R3->#13, R4->#23
+        const sampleBounds = [
+          { min: dp.r3Min, max: dp.r3Max },
+          { min: dp.r12Min, max: dp.r12Max },
+          { min: dp.r13Min, max: dp.r13Max },
+          { min: dp.r23Min, max: dp.r23Max }
+        ][readingIdx];
+
+        if (sampleBounds?.min !== undefined && sampleBounds?.max !== undefined) {
+          rMin = sampleBounds.min;
+          rMax = sampleBounds.max;
+        } else if (dp.min !== undefined && dp.max !== undefined) {
+          // Fallback to global pressure limits (converted to ml)
+          rMin = Math.max(rMin, dp.min * 100);
+          rMax = Math.min(rMax, dp.max * 100);
+          if (rMin >= rMax) { rMin = dp.min * 100; rMax = dp.max * 100; }
+        }
+      }
+
+      return Number(randomBetween(rMin, rMax).toFixed(1));
+    });
 
     return {
       pressure: p,
@@ -109,14 +140,29 @@ export function generateRandomReport(preset: Preset, spacingId: string, override
   report.forcedM = targetM;
 
   // 4. Uniformity (25 samples)
-  // discharge in 180s (ml) = (LPH / 3600) * 180 = LPH / 20
-  const mlMean = qBase / 20;
+  // Get limit range for nominal pressure (1.0 kg/cm2 or default)
+  const nominalPreset = preset.declaredDischargePerPressure?.find(p => p.pressure === 1.0) || preset.declaredDischargePerPressure?.[0];
+  const qMin = nominalPreset?.min || qBase * 0.95;
+  const qMax = nominalPreset?.max || qBase * 1.05;
+
+  // Make mean emission rate exactly equal to declared only 10% of the time
+  let targetMean = qBase;
+  if (Math.random() > 0.10) {
+    const offset = qBase * randomBetween(0.01, 0.05); // 1% to 5% offset
+    targetMean += Math.random() > 0.5 ? offset : -offset;
+  }
+  
+  // Ensure targetMean is within bounds
+  targetMean = Math.max(qMin + 0.01, Math.min(qMax - 0.01, targetMean));
+  // Safe spread to avoid generating out-of-bounds values
+  const safeSpread = Math.min(targetMean - qMin, qMax - targetMean);
+
   report.uniformity = Array.from({ length: 25 }, () => {
-    const ml = randomBetween(mlMean * 0.95, mlMean * 1.05);
-    const lph = (ml / 180) * 3600;
+    const lph = randomBetween(targetMean - safeSpread, targetMean + safeSpread);
+    const ml = lph * 50;
     return {
       emissionRate: Number(lph.toFixed(3)),
-      dischargeInSecs: Number(ml.toFixed(2)),
+      dischargeInSecs: Number(ml.toFixed(1)),
       dischargeLph: Number(lph.toFixed(3))
     };
   });

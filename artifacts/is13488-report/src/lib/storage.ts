@@ -125,7 +125,15 @@ export function getPresets(): Preset[] {
       }
       return defaults;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (parsed.length === 0 && defaults.length > 0) {
+      savePresets(defaults);
+      if (!getDefaultPresetId()) {
+        setDefaultPresetId(defaults[0].id);
+      }
+      return defaults;
+    }
+    return parsed;
   } catch {
     return getDefaults().presets;
   }
@@ -208,7 +216,7 @@ export function blankPreset(): Preset {
     category: "B, Unregulated",
     discharge: 0,
     minFlowPath: { value: 0, min: 0, max: 0 },
-    declaredFlowPath: { value: 0.6, min: 0.6, max: 0.85 },
+    declaredFlowPath: 0.6,
     specimenLength: 150,
     lengthBeforeTest: 150,
     appliedLoad: 0,

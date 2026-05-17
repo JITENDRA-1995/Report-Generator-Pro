@@ -66,7 +66,7 @@ function isoToBatch(iso: string): string {
 
 export default function NewReport() {
   const currentStandard = getCurrentStandard();
-  const presets = useMemo(() => getPresets(), []);
+  const presets = useMemo(() => getPresets(), [currentStandard.id]);
   const [, navigate] = useLocation();
   const [step, setStep] = useState<Step>("selection");
   const [presetId, setPresetId] = useState<string>(() => {

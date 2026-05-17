@@ -52,11 +52,41 @@ export function generateRandomReport(p: Preset, spacingId: string | undefined, o
     u23 = sorted[22].emissionRate;
     avgU = (u3 + u12 + u13 + u23) / 4;
   } else {
+    // 1. Determine target mean T
+    // 10% probability: match declared discharge exactly
+    // 90% probability: deviate by 1% to 5% plus or minus
+    let T = declaredDischarge;
+    const isExact = Math.random() < 0.10;
+    if (!isExact) {
+      const sign = Math.random() < 0.5 ? -1 : 1;
+      const deviationPercent = 0.01 + Math.random() * 0.04; // 1% to 5%
+      T = Number((declaredDischarge * (1 + sign * deviationPercent)).toFixed(2));
+    } else {
+      T = Number(declaredDischarge.toFixed(2));
+    }
+
+    // 2. Generate 25 values whose average is EXACTLY T
+    const targetSum = Math.round(T * 25 * 100) / 100;
+
     // Guarantee that the 4 sampled points have an average within ±2.5% of the 1.0kg declared value
     for (let attempt = 0; attempt < 100; attempt++) {
-      uniformity = Array.from({ length: 25 }).map(() => ({
-        emissionRate: rnd(declaredDischarge * 0.95, declaredDischarge * 1.05, 2),
-      }));
+      let values = Array.from({ length: 25 }).map(() => 
+        Number(rnd(T * 0.96, T * 1.04, 2).toFixed(2))
+      );
+      
+      let currentSum = Number(values.reduce((a, b) => a + b, 0).toFixed(2));
+      let diff = Number((targetSum - currentSum).toFixed(2));
+      
+      const step = diff > 0 ? 0.01 : -0.01;
+      const stepsCount = Math.round(Math.abs(diff) / 0.01);
+      
+      const indices = Array.from({ length: 25 }, (_, i) => i).sort(() => Math.random() - 0.5);
+      for (let i = 0; i < stepsCount; i++) {
+        const idx = indices[i % 25];
+        values[idx] = Number((values[idx] + step).toFixed(2));
+      }
+      
+      uniformity = values.map(v => ({ emissionRate: v }));
       const sorted = [...uniformity].sort((a, b) => a.emissionRate - b.emissionRate);
       u3 = sorted[2].emissionRate;
       u12 = sorted[11].emissionRate;

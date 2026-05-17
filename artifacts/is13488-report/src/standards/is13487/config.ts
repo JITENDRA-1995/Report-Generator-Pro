@@ -1,7 +1,7 @@
 import { FilePlus, FolderOpen, Settings, Zap } from "lucide-react";
 import { IS13487Wizard } from "./Wizard";
-import { ReportTemplate } from "./Template";
 import { emptyReport, generateRandomReport } from "./generator";
+import { defaultPresets } from "./presets";
 
 export const IS13487_CONFIG = {
   id: "is13487",
@@ -30,7 +30,7 @@ export const IS13487_CONFIG = {
       color: "bg-rose-50 text-rose-700",
     },
   ],
-  defaultPresets: [], // Will be populated as we design
+  defaultPresets,
   defaultSpecs: [],   // Will be populated as we design
   storage: {
     reportsKey: "is13487_reports_v1",
