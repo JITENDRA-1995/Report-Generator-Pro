@@ -147,18 +147,26 @@ export default function NewReport() {
 
   const downloadTemplate = () => {
     const isIs13487 = currentStandard.id === "is13487";
-    const data = [{
-      "Report Frequency": "Daily",
-      "CBC Performed? (Carbon Black Content)": "No",
-      "Preset *": presets[0]?.name || "",
-      "Spacing (cm) *": presets[0]?.spacings[0]?.value || "",
-      "Date of Mfg *": todayIso(),
-      "Date of Test *": todayIso(),
-      "Batch No *": isoToBatch(todayIso()),
-      "M/C No *": MC_NO_OPTIONS[0],
-      "Qty of Production *": "5",
-      ...(!isIs13487 ? { "Coil Length (Mtr)": "500" } : {})
-    }];
+    const data = isIs13487
+      ? [{
+          "Preset *": presets[0]?.name || "",
+          "Date of Mfg *": todayIso(),
+          "Date of Test *": todayIso(),
+          "Batch No *": isoToBatch(todayIso()),
+          "Qty of Production *": "5"
+        }]
+      : [{
+          "Report Frequency": "Daily",
+          "CBC Performed? (Carbon Black Content)": "No",
+          "Preset *": presets[0]?.name || "",
+          "Spacing (cm) *": presets[0]?.spacings[0]?.value || "",
+          "Date of Mfg *": todayIso(),
+          "Date of Test *": todayIso(),
+          "Batch No *": isoToBatch(todayIso()),
+          "M/C No *": MC_NO_OPTIONS[0],
+          "Qty of Production *": "5",
+          "Coil Length (Mtr)": "500"
+        }];
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "BatchData");
@@ -203,12 +211,15 @@ export default function NewReport() {
         };
 
         const generatedReports: ReportData[] = [];
+        const isIs13487 = currentStandard.id === "is13487";
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
           const pName = row["Preset *"];
           const targetPreset = presets.find((p: Preset) => p.name === pName) || presets[0];
           const sVal = parseFloat(row["Spacing (cm) *"]);
-          const targetSpacing = targetPreset.spacings.find((s: any) => s.value === sVal) || targetPreset.spacings[0];
+          const targetSpacing = (!isIs13487 && targetPreset?.spacings)
+            ? (targetPreset.spacings.find((s: any) => s.value === sVal) || targetPreset.spacings[0])
+            : null;
           const mfgDate = parseExcelDate(row["Date of Mfg *"]);
           const testDate = parseExcelDate(row["Date of Test *"]);
           let batchStr = row["Batch No *"];
@@ -218,20 +229,20 @@ export default function NewReport() {
 
           const coilLenVal = row["Coil Length (Mtr)"] ? parseInt(row["Coil Length (Mtr)"]) || 500 : 500;
           const batchOverrides: Partial<BasicInfo> = {
-            reportType: row["Report Frequency"] === "Weekly" ? "Weekly" : "Daily",
-            cbcPerformed: String(row["CBC Performed? (Carbon Black Content)"]).toLowerCase() === "yes",
+            reportType: isIs13487 ? "Daily" : (row["Report Frequency"] === "Weekly" ? "Weekly" : "Daily"),
+            cbcPerformed: isIs13487 ? false : String(row["CBC Performed? (Carbon Black Content)"]).toLowerCase() === "yes",
             dateOfMfg: isoToDisplay(mfgDate),
             dateOfTest: isoToDisplay(testDate),
             batchNo: batchStr,
-            mcNo: String(row["M/C No *"]),
+            mcNo: isIs13487 ? "" : String(row["M/C No *"] || ""),
             qtyOfProduction: row["Qty of Production *"] ? (
-              currentStandard.id === "is13487" 
+              isIs13487 
                 ? `${row["Qty of Production *"]} NOS` 
                 : `${row["Qty of Production *"]} Coil X ${coilLenVal} Mtr`
             ) : "",
           };
 
-          const report = currentStandard.generator.generateRandom(targetPreset, targetSpacing.id, batchOverrides);
+          const report = currentStandard.generator.generateRandom(targetPreset, targetSpacing?.id || "", batchOverrides);
           generatedReports.push(report);
           setProcessingProgress(Math.round(((i + 1) / rows.length) * 100));
           await new Promise(r => setTimeout(r, rows.length > 20 ? 0 : 50));
