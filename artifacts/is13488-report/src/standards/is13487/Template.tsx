@@ -86,9 +86,9 @@ export function IS13487Template({ data }: TemplateProps) {
           body { background: white; }
           .page-break { page-break-after: always; }
         }
-        .report-table th, .report-table td { border: 2px solid #000; padding: 0 4px 4px 4px; }
+        .report-table th, .report-table td { border: 1px solid #000; padding: 0 4px 4px 4px; }
         .report-table { border-collapse: collapse; width: 100%; border: none; }
-        .formula-box { border: 2px solid #000; border-radius: 0px; padding: 1rem; background: white; }
+        .formula-box { border: 1px solid #000; border-radius: 0px; padding: 1rem; background: white; }
       `}</style>
 
       {/* --- PAGE 1 --- */}
