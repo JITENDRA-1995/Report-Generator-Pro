@@ -543,7 +543,7 @@ function Page3({ data }: { data: ReportData }) {
 
       <SectionBar 
         srNo="10" 
-        defaultText="10. Environmental Stress Cracking Resistance (Type test) (CL 8.7.1 IS - 13488 : 2008) :" 
+        defaultText="10. Environmental Stress Cracking Resistance (Type test) (CL 8.7.2 IS - 13488 : 2008) :" 
         data={data} 
         className="section-bar" 
       />

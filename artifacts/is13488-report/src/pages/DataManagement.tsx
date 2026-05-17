@@ -520,13 +520,17 @@ function PresetEditor({
                 max={p.minFlowPath.max}
                 onChange={(min, max) => upd("minFlowPath", { value: min, min, max })}
               />
-              <ValRangeRow
-                label="Declared Flow Path"
-                unit="mm"
-                min={p.declaredFlowPath?.min ?? 0.6}
-                max={p.declaredFlowPath?.max ?? 0.85}
-                onChange={(min, max) => upd("declaredFlowPath", { value: (min + max) / 2, min, max })}
-              />
+              <div className="grid md:grid-cols-4 gap-4 items-center">
+                <Label className="text-xs font-semibold">Declared Flow Path</Label>
+                <div className="flex items-center gap-2 md:col-span-3">
+                  <NumInput
+                    value={typeof p.declaredFlowPath === 'object' ? (p.declaredFlowPath as any)?.value ?? 0.8 : p.declaredFlowPath ?? 0.8}
+                    precision={2}
+                    onChange={(v) => upd("declaredFlowPath", v)}
+                  />
+                  <span className="text-xs text-muted-foreground">mm</span>
+                </div>
+              </div>
               {is13488 && (
                 <>
                   <ValRangeRow
@@ -880,7 +884,7 @@ function HeadersTab() {
         "7": "7. Environmental Stress Cracking Resistance (Acceptance test) (CL 8.7.1 IS - 13488 : 2008) :",
         "8": "8. Resistance to Pull Out of Joint Between Fitting & Emitting Pipe (CL 8.6 IS - 13488 : 2008) :",
         "9": "9. Uniformity of Emission Rate (Cl 8.1 IS - 13488:2008) (C.V. - Max 10% & Mean Deviation - Max 10%)",
-        "10": "10. Environmental Stress Cracking Resistance (Type test) (CL 8.7.1 IS - 13488 : 2008) :",
+        "10": "10. Environmental Stress Cracking Resistance (Type test) (CL 8.7.2 IS - 13488 : 2008) :",
         "11": "Resistance to Hydraulic Pressure at Ambient Temp. (CL 8.4.1 IS - 13488 : 2008)",
         "12": "Resistance to Hydraulic Pressure at Elevated Temp. (CL 8.4.2 IS - 13488 : 2008)",
         "13": "13. Resistance to Tension at Elevated Temp. (CL 8.5 IS - 13488 : 2008) :",

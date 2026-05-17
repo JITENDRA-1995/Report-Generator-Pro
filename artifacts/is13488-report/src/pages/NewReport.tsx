@@ -101,6 +101,7 @@ export default function NewReport() {
   const [batchTouched, setBatchTouched] = useState(false);
   const [mcNo, setMcNo] = useState<string>("");
   const [qty, setQty] = useState<number>(0);
+  const [coilLength, setCoilLength] = useState<number>(500);
   const [reportType, setReportType] = useState<"Daily" | "Weekly">("Daily");
   const [cbcPerformed, setCbcPerformed] = useState<boolean>(false);
   const [isManualDischarge, setIsManualDischarge] = useState<boolean>(false);
@@ -121,7 +122,7 @@ export default function NewReport() {
     dateOfTest: isoToDisplay(dateOfTest),
     batchNo,
     mcNo,
-    qtyOfProduction: qty > 0 ? (currentStandard.id === "is13487" ? `${qty} NOS` : `${qty} Coil X 500 Mtr`) : "",
+    qtyOfProduction: qty > 0 ? (currentStandard.id === "is13487" ? `${qty} NOS` : `${qty} Coil X ${coilLength} Mtr`) : "",
     reportType,
     cbcPerformed,
     ...(currentStandard.id === "is13487" ? { discharge: "1.00 KG/CM2" } : {})
@@ -145,6 +146,7 @@ export default function NewReport() {
   const [processingProgress, setProcessingProgress] = useState(0);
 
   const downloadTemplate = () => {
+    const isIs13487 = currentStandard.id === "is13487";
     const data = [{
       "Report Frequency": "Daily",
       "CBC Performed? (Carbon Black Content)": "No",
@@ -155,6 +157,7 @@ export default function NewReport() {
       "Batch No *": isoToBatch(todayIso()),
       "M/C No *": MC_NO_OPTIONS[0],
       "Qty of Production *": "5",
+      ...(!isIs13487 ? { "Coil Length (Mtr)": "500" } : {})
     }];
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -213,6 +216,7 @@ export default function NewReport() {
           else if (typeof batchStr === "number" || batchStr instanceof Date) batchStr = isoToBatch(parseExcelDate(batchStr));
           else batchStr = String(batchStr).trim();
 
+          const coilLenVal = row["Coil Length (Mtr)"] ? parseInt(row["Coil Length (Mtr)"]) || 500 : 500;
           const batchOverrides: Partial<BasicInfo> = {
             reportType: row["Report Frequency"] === "Weekly" ? "Weekly" : "Daily",
             cbcPerformed: String(row["CBC Performed? (Carbon Black Content)"]).toLowerCase() === "yes",
@@ -220,7 +224,11 @@ export default function NewReport() {
             dateOfTest: isoToDisplay(testDate),
             batchNo: batchStr,
             mcNo: String(row["M/C No *"]),
-            qtyOfProduction: row["Qty of Production *"] ? `${row["Qty of Production *"]} Coil X 500 Mtr` : "",
+            qtyOfProduction: row["Qty of Production *"] ? (
+              currentStandard.id === "is13487" 
+                ? `${row["Qty of Production *"]} NOS` 
+                : `${row["Qty of Production *"]} Coil X ${coilLenVal} Mtr`
+            ) : "",
           };
 
           const report = currentStandard.generator.generateRandom(targetPreset, targetSpacing.id, batchOverrides);
@@ -338,7 +346,7 @@ export default function NewReport() {
   const isIs13487 = currentStandard.id === "is13487";
   const isMcRequired = !isIs13487;
   const isSpacingRequired = !isIs13487;
-  const requiredOk = presetId && (!isSpacingRequired || spacingId) && dateOfMfg && dateOfTest && batchNo.trim() && (!isMcRequired || mcNo.trim()) && qty > 0;
+  const requiredOk = presetId && (!isSpacingRequired || spacingId) && dateOfMfg && dateOfTest && batchNo.trim() && (!isMcRequired || mcNo.trim()) && qty > 0 && (isIs13487 || coilLength > 0);
 
   if (step === "initial") {
     return (
@@ -423,7 +431,12 @@ export default function NewReport() {
                 <div>
                   <Label>Qty *</Label>
                   <div className="flex items-center gap-2">
-                    <Input type="number" value={qty === 0 ? "" : qty} onChange={(e) => setQty(parseInt(e.target.value) || 0)} />
+                    <Input 
+                      type="number" 
+                      value={qty === 0 ? "" : qty} 
+                      onChange={(e) => setQty(parseInt(e.target.value) || 0)} 
+                      onWheel={(e) => e.currentTarget.blur()}
+                    />
                     <span>Nos</span>
                   </div>
                 </div>
@@ -439,8 +452,23 @@ export default function NewReport() {
                   <div className="md:col-span-2">
                     <Label>Qty *</Label>
                     <div className="flex items-center gap-2">
-                      <Input type="number" value={qty === 0 ? "" : qty} onChange={(e) => setQty(parseInt(e.target.value) || 0)} />
-                      <span>Coil X 500 Mtr</span>
+                      <Input 
+                        type="number" 
+                        value={qty === 0 ? "" : qty} 
+                        onChange={(e) => setQty(parseInt(e.target.value) || 0)} 
+                        placeholder="Quantity"
+                        onWheel={(e) => e.currentTarget.blur()}
+                      />
+                      <span className="text-sm font-semibold text-slate-500 whitespace-nowrap">Coil X</span>
+                      <Input 
+                        type="number" 
+                        value={coilLength === 0 ? "" : coilLength} 
+                        onChange={(e) => setCoilLength(parseInt(e.target.value) || 0)} 
+                        placeholder="Meter selection"
+                        className="w-32 text-center"
+                        onWheel={(e) => e.currentTarget.blur()}
+                      />
+                      <span className="text-sm font-semibold text-slate-500 whitespace-nowrap">Mtr</span>
                     </div>
                   </div>
                 </>
