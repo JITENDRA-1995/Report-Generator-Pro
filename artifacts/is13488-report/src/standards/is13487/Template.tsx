@@ -1,6 +1,6 @@
 import React from "react";
 import type { ReportData } from "@/lib/types";
-import { avg, fmt, calcUniformity } from "@/lib/calc";
+import { avg, fmt, calcUniformity, calcExponent } from "@/lib/calc";
 import { getPreset, getSpecFor } from "@/lib/storage";
 import {
   LineChart,
