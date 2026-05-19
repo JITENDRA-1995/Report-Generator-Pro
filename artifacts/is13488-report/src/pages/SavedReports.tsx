@@ -98,7 +98,7 @@ export default function SavedReports() {
   const [selectedSizeFilters, setSelectedSizeFilters] = useState<string[]>([]);
 
   const filterOptions = useMemo(() => {
-    const weekLabels = reports.map(r => getWeekRangeStr(r.basicInfo.dateOfTest))
+    const weekLabels = reports.map(r => getWeekRangeStr(r.basicInfo.dateOfMfg))
       .filter(w => w !== "Unknown Week");
     const uniqueWeeks = Array.from(new Set(weekLabels)).sort((a, b) => {
       const matchA = a.match(/\((\d{2})\/(\d{2})\/(\d{4})/);
@@ -157,7 +157,7 @@ export default function SavedReports() {
         let val = "";
         if (filterType === "mcNo") val = b.mcNo;
         else if (filterType === "dateOfTest") val = b.dateOfTest;
-        else if (filterType === "week") val = getWeekRangeStr(b.dateOfTest);
+        else if (filterType === "week") val = getWeekRangeStr(b.dateOfMfg);
         else if (filterType === "month") val = getMonthStr(b.dateOfTest);
         else if (filterType === "size") val = b.size;
         else if (filterType === "batchNo") val = b.batchNo;
