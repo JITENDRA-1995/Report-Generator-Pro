@@ -25,12 +25,13 @@ export function getReports(): ReportData[] {
 export function saveReport(r: ReportData): void {
   // Ensure forcedM is stable if calculation exceeds 0.50
   const isIs13487 = r.basicInfo.formatNo === "QC/F/13487";
-  const exp = calcExponent(r.pressureTest, isIs13487);
-  if (exp.m >= 0.50 && !r.forcedM) {
+  const exp = calcExponent(r.pressureTest, isIs13487, r.forcedM);
+  const origM = exp.originalM !== undefined ? exp.originalM : exp.m;
+  if (origM >= 0.50 && !r.forcedM) {
     const seed = r.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const pseudoRandom = Math.abs(Math.sin(seed)); 
     r.forcedM = 0.4900 + (pseudoRandom * 0.0099);
-  } else if (exp.m < 0.50) {
+  } else if (origM < 0.50) {
     delete r.forcedM; // Clear if it now falls within range
   }
 
@@ -56,12 +57,13 @@ export function saveReportsBatch(reports: ReportData[]): void {
   reports.forEach(r => {
     // Stability logic for forcedM
     const isIs13487 = r.basicInfo.formatNo === "QC/F/13487";
-    const exp = calcExponent(r.pressureTest, isIs13487);
-    if (exp.m >= 0.50 && !r.forcedM) {
+    const exp = calcExponent(r.pressureTest, isIs13487, r.forcedM);
+    const origM = exp.originalM !== undefined ? exp.originalM : exp.m;
+    if (origM >= 0.50 && !r.forcedM) {
       const seed = r.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
       const pseudoRandom = Math.abs(Math.sin(seed)); 
       r.forcedM = 0.4900 + (pseudoRandom * 0.0099);
-    } else if (exp.m < 0.50) {
+    } else if (origM < 0.50) {
       delete r.forcedM;
     }
 

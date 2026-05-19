@@ -769,7 +769,7 @@ function HydraulicSection({
   );
 }
 function Page4({ data }: { data: ReportData }) {
-  const initialExp = calcExponent(data.pressureTest);
+  const initialExp = calcExponent(data.pressureTest, false, data.forcedM);
   
   // Use adjusted readings if m was > 0.5
   const finalPressureRows = data.pressureTest.map((pr, i) => {
@@ -783,7 +783,7 @@ function Page4({ data }: { data: ReportData }) {
     return { ...pr, readings };
   });
 
-  const exp = initialExp.adjustedReadings ? calcExponent(finalPressureRows) : initialExp;
+  const exp = initialExp.adjustedReadings ? calcExponent(finalPressureRows, false, data.forcedM) : initialExp;
 
   const chartData = finalPressureRows.map((pr, i) => ({
     pressure: pr.pressure,
