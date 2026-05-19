@@ -53,6 +53,22 @@ function getWeekRangeStr(dateStr: string): string {
   return `Week ${weekNum} (${startStr} - ${endStr})`;
 }
 
+function getMonthStr(dateStr: string): string {
+  if (!dateStr) return "Unknown Month";
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return "Unknown Month";
+  const monthNum = parseInt(parts[1], 10);
+  const year = parts[2];
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  if (monthNum >= 1 && monthNum <= 12) {
+    return `${months[monthNum - 1]} ${year}`;
+  }
+  return "Unknown Month";
+}
+
 export default function SavedReports() {
   const getReportFilename = (r: ReportData): string => {
     const is13487 = r.basicInfo.formatNo?.includes("13487");
@@ -78,6 +94,8 @@ export default function SavedReports() {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  const [selectedMcNoFilters, setSelectedMcNoFilters] = useState<string[]>([]);
+  const [selectedSizeFilters, setSelectedSizeFilters] = useState<string[]>([]);
 
   const filterOptions = useMemo(() => {
     const weekLabels = reports.map(r => getWeekRangeStr(r.basicInfo.dateOfTest))
@@ -93,10 +111,28 @@ export default function SavedReports() {
       return b.localeCompare(a);
     });
 
+    const monthLabels = reports.map(r => getMonthStr(r.basicInfo.dateOfTest))
+      .filter(m => m !== "Unknown Month");
+    const uniqueMonths = Array.from(new Set(monthLabels)).sort((a, b) => {
+      const matchA = a.split(' ');
+      const matchB = b.split(' ');
+      if (matchA.length === 2 && matchB.length === 2) {
+        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const monthA = months.indexOf(matchA[0]);
+        const monthB = months.indexOf(matchB[0]);
+        const yearA = parseInt(matchA[1]);
+        const yearB = parseInt(matchB[1]);
+        if (yearA !== yearB) return yearB - yearA;
+        return monthB - monthA;
+      }
+      return b.localeCompare(a);
+    });
+
     const options: Record<string, string[]> = {
       mcNo: Array.from(new Set(reports.map(r => r.basicInfo.mcNo))).sort(),
       dateOfTest: Array.from(new Set(reports.map(r => r.basicInfo.dateOfTest))).sort(),
       week: uniqueWeeks,
+      month: uniqueMonths,
       size: Array.from(new Set(reports.map(r => r.basicInfo.size))).sort(),
       batchNo: Array.from(new Set(reports.map(r => r.basicInfo.batchNo))).sort(),
     };
@@ -104,20 +140,44 @@ export default function SavedReports() {
   }, [reports]);
 
   const filteredReports = useMemo(() => {
-    if (filterType === "all" || selectedFilters.length === 0) return reports;
+    const hasMainFilter = filterType !== "all" && selectedFilters.length > 0;
+    const hasMcNoFilter = selectedMcNoFilters.length > 0;
+    const hasSizeFilter = selectedSizeFilters.length > 0;
     
+    if (!hasMainFilter && !hasMcNoFilter && !hasSizeFilter) return reports;
+
+    const currentStandardId = getCurrentStandard().id;
+    const isDateFilter = ["dateOfTest", "month", "week"].includes(filterType);
+
     return reports.filter(r => {
       const b = r.basicInfo;
-      let val = "";
-      if (filterType === "mcNo") val = b.mcNo;
-      else if (filterType === "dateOfTest") val = b.dateOfTest;
-      else if (filterType === "week") val = getWeekRangeStr(b.dateOfTest);
-      else if (filterType === "size") val = b.size;
-      else if (filterType === "batchNo") val = b.batchNo;
-      
-      return selectedFilters.includes(val);
+
+      // 1. Primary main filter check
+      if (hasMainFilter) {
+        let val = "";
+        if (filterType === "mcNo") val = b.mcNo;
+        else if (filterType === "dateOfTest") val = b.dateOfTest;
+        else if (filterType === "week") val = getWeekRangeStr(b.dateOfTest);
+        else if (filterType === "month") val = getMonthStr(b.dateOfTest);
+        else if (filterType === "size") val = b.size;
+        else if (filterType === "batchNo") val = b.batchNo;
+
+        if (!selectedFilters.includes(val)) return false;
+      }
+
+      // 2. Secondary Machine Number filter check
+      if (isDateFilter && currentStandardId === "is13488" && hasMcNoFilter) {
+        if (!selectedMcNoFilters.includes(b.mcNo)) return false;
+      }
+
+      // 3. Secondary Size filter check
+      if (isDateFilter && (currentStandardId === "is13488" || currentStandardId === "is13487") && hasSizeFilter) {
+        if (!selectedSizeFilters.includes(b.size)) return false;
+      }
+
+      return true;
     });
-  }, [reports, filterType, selectedFilters]);
+  }, [reports, filterType, selectedFilters, selectedMcNoFilters, selectedSizeFilters]);
 
   const toggleFilter = (val: string) => {
     setSelectedFilters(prev => 
@@ -385,7 +445,7 @@ export default function SavedReports() {
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 min-w-[80px]">
                   <Filter className="w-4 h-4" /> Filter By:
                 </div>
-                <Select value={filterType} onValueChange={(v) => { setFilterType(v); setSelectedFilters([]); }}>
+                <Select value={filterType} onValueChange={(v) => { setFilterType(v); setSelectedFilters([]); setSelectedMcNoFilters([]); setSelectedSizeFilters([]); }}>
                   <SelectTrigger className="w-[180px] bg-white border-slate-200">
                     <SelectValue placeholder="Select Category" />
                   </SelectTrigger>
@@ -393,6 +453,7 @@ export default function SavedReports() {
                     <SelectItem value="all">All Reports</SelectItem>
                     <SelectItem value="mcNo">M/C No</SelectItem>
                     <SelectItem value="dateOfTest">Date</SelectItem>
+                    <SelectItem value="month">Month</SelectItem>
                     <SelectItem value="week">Week</SelectItem>
                     <SelectItem value="size">Size</SelectItem>
                     <SelectItem value="batchNo">Batch No</SelectItem>
@@ -403,7 +464,11 @@ export default function SavedReports() {
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    onClick={() => setSelectedFilters([])}
+                    onClick={() => {
+                      setSelectedFilters([]);
+                      setSelectedMcNoFilters([]);
+                      setSelectedSizeFilters([]);
+                    }}
                     className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 ml-auto"
                   >
                     Clear Filter
@@ -412,21 +477,83 @@ export default function SavedReports() {
               </div>
 
               {filterType !== "all" && (
-                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200 mt-2">
-                  {filterOptions[filterType].map(val => (
-                    <Badge 
-                      key={val}
-                      variant={selectedFilters.includes(val) ? "default" : "outline"}
-                      className={`cursor-pointer px-3 py-1 text-xs transition-all ${
-                        selectedFilters.includes(val) 
-                          ? "bg-emerald-600 hover:bg-emerald-700 border-emerald-600" 
-                          : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300"
-                      }`}
-                      onClick={() => toggleFilter(val)}
-                    >
-                      {val}
-                    </Badge>
-                  ))}
+                <div className="space-y-4 pt-2 border-t border-slate-200 mt-2">
+                  {/* Category 1: Main Selected Filter Group */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      Select {filterType === "dateOfTest" ? "Date" : filterType === "week" ? "Week" : filterType === "month" ? "Month" : filterType === "size" ? "Size" : filterType === "mcNo" ? "M/C No" : "Batch No"}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {filterOptions[filterType].map(val => (
+                        <Badge 
+                          key={val}
+                          variant={selectedFilters.includes(val) ? "default" : "outline"}
+                          className={`cursor-pointer px-3 py-1 text-xs transition-all ${
+                            selectedFilters.includes(val) 
+                              ? "bg-emerald-600 hover:bg-emerald-700 border-emerald-600" 
+                              : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300"
+                          }`}
+                          onClick={() => toggleFilter(val)}
+                        >
+                          {val}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Category 2: Machine (M/C No) Filter - conditional for Date, Month, Week under IS 13488 */}
+                  {["dateOfTest", "month", "week"].includes(filterType) && getCurrentStandard().id === "is13488" && (
+                    <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-150">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <Tag className="w-3 h-3 text-slate-400" /> Filter by Machine (M/C No)
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {filterOptions.mcNo.map(val => (
+                          <Badge 
+                            key={val}
+                            variant={selectedMcNoFilters.includes(val) ? "default" : "outline"}
+                            className={`cursor-pointer px-3 py-1 text-xs transition-all ${
+                              selectedMcNoFilters.includes(val) 
+                                ? "bg-emerald-600 hover:bg-emerald-700 border-emerald-600" 
+                                : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300"
+                            }`}
+                            onClick={() => setSelectedMcNoFilters(prev => 
+                              prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+                            )}
+                          >
+                            {val}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Category 3: Size Filter - conditional for Date, Month, Week under IS 13488 or IS 13487 */}
+                  {["dateOfTest", "month", "week"].includes(filterType) && (getCurrentStandard().id === "is13488" || getCurrentStandard().id === "is13487") && (
+                    <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-150">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <Filter className="w-3 h-3 text-slate-400" /> Filter by Size
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {filterOptions.size.map(val => (
+                          <Badge 
+                            key={val}
+                            variant={selectedSizeFilters.includes(val) ? "default" : "outline"}
+                            className={`cursor-pointer px-3 py-1 text-xs transition-all ${
+                              selectedSizeFilters.includes(val) 
+                                ? "bg-emerald-600 hover:bg-emerald-700 border-emerald-600" 
+                                : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300"
+                            }`}
+                            onClick={() => setSelectedSizeFilters(prev => 
+                              prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+                            )}
+                          >
+                            {val}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -435,7 +562,7 @@ export default function SavedReports() {
               <div className="text-center py-12 bg-slate-50 rounded-lg border border-dashed border-slate-200">
                 <Search className="w-8 h-8 text-slate-300 mx-auto mb-3" />
                 <p className="text-slate-500 font-medium">No reports match the selected filters.</p>
-                <Button variant="ghost" size="sm" onClick={() => { setFilterType("all"); setSelectedFilters([]); }} className="mt-2 text-emerald-600">
+                <Button variant="ghost" size="sm" onClick={() => { setFilterType("all"); setSelectedFilters([]); setSelectedMcNoFilters([]); setSelectedSizeFilters([]); }} className="mt-2 text-emerald-600">
                   Reset Filters
                 </Button>
               </div>
