@@ -23,6 +23,36 @@ import { getCurrentStandard } from "@/standards/registry";
 import { HeaderActions } from "@/components/HeaderActions";
 // JSZip removed as requested
 
+function getWeekRangeStr(dateStr: string): string {
+  if (!dateStr) return "Unknown Week";
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return "Unknown Week";
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1; // 0-indexed month
+  const year = parseInt(parts[2], 10);
+  const date = new Date(year, month, day);
+  if (isNaN(date.getTime())) return "Unknown Week";
+
+  // Get Monday as start of the week
+  const dayOfWeek = date.getDay(); // 0 is Sunday, 1 is Monday, ...
+  const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+  const startOfWeek = new Date(date.setDate(diff));
+
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const startStr = `${pad(startOfWeek.getDate())}/${pad(startOfWeek.getMonth() + 1)}/${startOfWeek.getFullYear()}`;
+  const endStr = `${pad(endOfWeek.getDate())}/${pad(endOfWeek.getMonth() + 1)}/${endOfWeek.getFullYear()}`;
+
+  // Get week number
+  const tempDate = new Date(startOfWeek.getFullYear(), 0, 1);
+  const days = Math.floor((startOfWeek.getTime() - tempDate.getTime()) / (24 * 60 * 60 * 1000));
+  const weekNum = Math.ceil((days + tempDate.getDay() + 1) / 7);
+
+  return `Week ${weekNum} (${startStr} - ${endStr})`;
+}
+
 export default function SavedReports() {
   const getReportFilename = (r: ReportData): string => {
     const is13487 = r.basicInfo.formatNo?.includes("13487");
@@ -50,9 +80,23 @@ export default function SavedReports() {
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
 
   const filterOptions = useMemo(() => {
+    const weekLabels = reports.map(r => getWeekRangeStr(r.basicInfo.dateOfTest))
+      .filter(w => w !== "Unknown Week");
+    const uniqueWeeks = Array.from(new Set(weekLabels)).sort((a, b) => {
+      const matchA = a.match(/\((\d{2})\/(\d{2})\/(\d{4})/);
+      const matchB = b.match(/\((\d{2})\/(\d{2})\/(\d{4})/);
+      if (matchA && matchB) {
+        const dateA = new Date(parseInt(matchA[3]), parseInt(matchA[2]) - 1, parseInt(matchA[1]));
+        const dateB = new Date(parseInt(matchB[3]), parseInt(matchB[2]) - 1, parseInt(matchB[1]));
+        return dateB.getTime() - dateA.getTime(); // Descending order
+      }
+      return b.localeCompare(a);
+    });
+
     const options: Record<string, string[]> = {
       mcNo: Array.from(new Set(reports.map(r => r.basicInfo.mcNo))).sort(),
       dateOfTest: Array.from(new Set(reports.map(r => r.basicInfo.dateOfTest))).sort(),
+      week: uniqueWeeks,
       size: Array.from(new Set(reports.map(r => r.basicInfo.size))).sort(),
       batchNo: Array.from(new Set(reports.map(r => r.basicInfo.batchNo))).sort(),
     };
@@ -67,6 +111,7 @@ export default function SavedReports() {
       let val = "";
       if (filterType === "mcNo") val = b.mcNo;
       else if (filterType === "dateOfTest") val = b.dateOfTest;
+      else if (filterType === "week") val = getWeekRangeStr(b.dateOfTest);
       else if (filterType === "size") val = b.size;
       else if (filterType === "batchNo") val = b.batchNo;
       
@@ -348,6 +393,7 @@ export default function SavedReports() {
                     <SelectItem value="all">All Reports</SelectItem>
                     <SelectItem value="mcNo">M/C No</SelectItem>
                     <SelectItem value="dateOfTest">Date</SelectItem>
+                    <SelectItem value="week">Week</SelectItem>
                     <SelectItem value="size">Size</SelectItem>
                     <SelectItem value="batchNo">Batch No</SelectItem>
                   </SelectContent>
