@@ -305,10 +305,10 @@ export function IS13487Template({ data }: TemplateProps) {
               <tr className="h-12 uppercase text-[9px]" style={{ backgroundColor: '#f1f5f9' }}>
                 <th className="w-10">NO</th>
                 <th className="w-20">Pressure<br/>(kg/cm²)</th>
-                <th className="w-16">R1 (3)<br/>(ml)</th>
-                <th className="w-16">R2 (12)<br/>(ml)</th>
-                <th className="w-16">R3 (13)<br/>(ml)</th>
-                <th className="w-16">R4 (23)<br/>(ml)</th>
+                <th className="w-16">3<br/>(ml)</th>
+                <th className="w-16">12<br/>(ml)</th>
+                <th className="w-16">13<br/>(ml)</th>
+                <th className="w-16">23<br/>(ml)</th>
                 <th className="w-18">Average<br/>(ml)</th>
                 <th className="w-18">Average<br/>(LPH)</th>
                 <th className="w-18">Declared<br/>(LPH)</th>
