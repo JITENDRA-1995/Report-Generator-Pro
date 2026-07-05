@@ -110,7 +110,7 @@ export default function NewReport() {
   const preset = presets.find((p: Preset) => p.id === presetId) ?? null;
 
   useEffect(() => {
-    if (preset && !spacingId) setSpacingId(preset.spacings[0]?.id ?? "");
+    if (preset && preset.spacings && !spacingId) setSpacingId(preset.spacings[0]?.id ?? "");
   }, [preset, spacingId]);
 
   useEffect(() => {
@@ -160,7 +160,7 @@ export default function NewReport() {
           "Report Frequency": "Daily",
           "CBC Performed? (Carbon Black Content)": "No",
           "Preset *": presets[0]?.name || "",
-          "Spacing (cm) *": presets[0]?.spacings[0]?.value || "",
+          "Spacing (cm) *": presets[0]?.spacings?.[0]?.value || "",
           "Date of Mfg *": todayIso(),
           "Date of Test *": todayIso(),
           "Batch No *": isoToBatch(todayIso()),
