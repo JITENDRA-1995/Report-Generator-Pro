@@ -36,8 +36,17 @@ export default function Template({ data, isExporting = false, customHeaders }: {
             </thead>
             <tbody>
               {perfData.map((row, i) => {
-                const motiveDiff = row.declaredMotive > 0 ? (Math.abs(row.observedMotive - row.declaredMotive) / row.declaredMotive) * 100 : 0;
-                const suctionDiff = row.declaredSuction > 0 ? (Math.abs(row.observedSuction - row.declaredSuction) / row.declaredSuction) * 100 : 0;
+                const getPercentChange = (observed: number, declared: number): string => {
+                  if (declared <= 0) return "0.00";
+                  const pct = ((observed - declared) / declared) * 100;
+                  if (pct > 0) return `+${pct.toFixed(2)}`;
+                  if (pct < 0) return `${pct.toFixed(2)}`;
+                  return "0.00";
+                };
+                
+                const motiveDiffStr = getPercentChange(row.observedMotive, row.declaredMotive);
+                const suctionDiffStr = getPercentChange(row.observedSuction, row.declaredSuction);
+                
                 return (
                   <tr key={i} className="border-b border-black">
                     <td className="border-r border-black p-[2px]">{i + 1}</td>
@@ -45,10 +54,10 @@ export default function Template({ data, isExporting = false, customHeaders }: {
                     <td className="border-r border-black p-[2px]">{row.outlet.toFixed(2)}</td>
                     <td className="border-r border-black p-[2px]">{row.declaredMotive}</td>
                     <td className="border-r border-black p-[2px]">{row.observedMotive}</td>
-                    <td className="border-r border-black p-[2px]">{motiveDiff.toFixed(2)}</td>
+                    <td className="border-r border-black p-[2px]">{motiveDiffStr}</td>
                     <td className="border-r border-black p-[2px]">{row.declaredSuction}</td>
                     <td className="border-r border-black p-[2px]">{row.observedSuction}</td>
-                    <td className="p-[2px]">{suctionDiff.toFixed(2)}</td>
+                    <td className="p-[2px]">{suctionDiffStr}</td>
                   </tr>
                 );
               })}

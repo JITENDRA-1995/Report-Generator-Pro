@@ -27,14 +27,40 @@ function generateValueWithVariation(declared: number): number {
 function generatePerformance(preset: Preset) {
   const table = preset.is14483Table || [];
   
+  let lastSuction = Infinity;
   return table.map(row => {
+    const declaredMotive = row.motiveFlow;
+    const observedMotive = generateValueWithVariation(declaredMotive);
+    const declaredSuction = row.waterSuction;
+    
+    // Observed suction must be within +-7% (generateValueWithVariation range)
+    const minAllowed = Math.ceil(declaredSuction * 0.93);
+    const maxAllowed = Math.floor(declaredSuction * 1.07);
+    
+    // It must also be <= lastSuction (since suction decreases as pressure increases)
+    const upperLimit = Math.min(maxAllowed, lastSuction);
+    
+    let observedSuction: number;
+    if (upperLimit >= minAllowed) {
+      const val = generateValueWithVariation(declaredSuction);
+      if (val >= minAllowed && val <= upperLimit) {
+        observedSuction = val;
+      } else {
+        observedSuction = minAllowed + Math.floor(Math.random() * (upperLimit - minAllowed + 1));
+      }
+    } else {
+      observedSuction = lastSuction;
+    }
+    
+    lastSuction = observedSuction;
+    
     return {
       inlet: row.pressure,
       outlet: 0,
-      declaredMotive: row.motiveFlow,
-      observedMotive: generateValueWithVariation(row.motiveFlow),
-      declaredSuction: row.waterSuction,
-      observedSuction: generateValueWithVariation(row.waterSuction)
+      declaredMotive,
+      observedMotive,
+      declaredSuction,
+      observedSuction
     };
   });
 }
