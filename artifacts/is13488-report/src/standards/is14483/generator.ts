@@ -27,28 +27,25 @@ function generateValueWithVariation(declared: number): number {
 function generatePerformance(preset: Preset) {
   const table = preset.is14483Table || [];
   
+  // 1. Generate motive flow variations
+  const observedMotives = table.map(row => generateValueWithVariation(row.motiveFlow));
+  
+  // 2. Generate suction variations and sort descending to naturally match the decreasing pressure steps
+  const sortedSuctions = table.map(row => generateValueWithVariation(row.waterSuction))
+    .sort((a, b) => b - a);
+  
+  // 3. Map back and clamp to ensure each value satisfies both descending order and +/-7% standard bounds
   let lastSuction = Infinity;
-  return table.map(row => {
+  return table.map((row, idx) => {
     const declaredMotive = row.motiveFlow;
-    const observedMotive = generateValueWithVariation(declaredMotive);
+    const observedMotive = observedMotives[idx];
     const declaredSuction = row.waterSuction;
     
-    // Observed suction must be within +-7% (generateValueWithVariation range)
     const minAllowed = Math.ceil(declaredSuction * 0.93);
     const maxAllowed = Math.floor(declaredSuction * 1.07);
     
-    // It must also be <= lastSuction (since suction decreases as pressure increases)
-    const upperLimit = Math.min(maxAllowed, lastSuction);
-    
-    let observedSuction: number;
-    if (upperLimit >= minAllowed) {
-      const val = generateValueWithVariation(declaredSuction);
-      if (val >= minAllowed && val <= upperLimit) {
-        observedSuction = val;
-      } else {
-        observedSuction = minAllowed + Math.floor(Math.random() * (upperLimit - minAllowed + 1));
-      }
-    } else {
+    let observedSuction = Math.max(minAllowed, Math.min(maxAllowed, sortedSuctions[idx]));
+    if (observedSuction > lastSuction) {
       observedSuction = lastSuction;
     }
     
