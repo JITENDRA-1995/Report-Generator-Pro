@@ -255,12 +255,20 @@ function PresetsTab() {
                       <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">Default</span>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {p.size || "—"} · Class {p.className || "—"} · {(p.discharge || 0).toFixed(2)} LPH · {p.category}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Spacings: {p.spacings.map((s) => `${s.value}cm`).join(", ") || "—"}
-                  </div>
+                  {getCurrentStandardId() === "is14483" ? (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Size: {p.size || "—"} · Model: {p.category || "—"} · Performance Steps: {p.is14483Table?.length || 0}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {p.size || "—"} · Class {p.className || "—"} · {(p.discharge || 0).toFixed(2)} LPH · {p.category}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Spacings: {p.spacings.map((s) => `${s.value}cm`).join(", ") || "—"}
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="flex gap-1">
                   <Button
@@ -393,46 +401,62 @@ function PresetEditor({
         <div className="grid md:grid-cols-3 gap-4">
           <div>
             <Label className="text-xs">Preset Name</Label>
-            <Input value={p.name} placeholder="e.g. 4 LPH On-Line" onChange={(e) => upd("name", e.target.value)} />
+            <Input value={p.name} placeholder={is14483 ? "e.g. Ventury Injector" : "e.g. 4 LPH On-Line"} onChange={(e) => upd("name", e.target.value)} />
           </div>
-          <div>
-            <Label className="text-xs">{!isEmitterBase ? "Size" : "Brand"}</Label>
-            <Input value={!isEmitterBase ? p.size : p.className} placeholder={!isEmitterBase ? "e.g. 16 mm" : "e.g. PARAGON"} onChange={(e) => upd(!isEmitterBase ? "size" : "className", e.target.value)} />
-          </div>
-          {isEmitterBase && (
-            <div>
-              <Label className="text-xs">Size (LPH)</Label>
-              <Input value={p.size} placeholder="e.g. 4 LPH" onChange={(e) => upd("size", e.target.value)} />
-            </div>
-          )}
-          {!isEmitterBase && (
-            <div>
-              <Label className="text-xs">Class</Label>
-              <Input value={p.className} placeholder="e.g. 2.5" onChange={(e) => upd("className", e.target.value)} />
-            </div>
-          )}
-          <div>
-            <Label className="text-xs">Category</Label>
-            <Input value={p.category} placeholder="e.g. B, Unregulated" onChange={(e) => upd("category", e.target.value)} />
-          </div>
-          <div>
-            <Label className="text-xs">{!isEmitterBase ? "Discharge (LPH)" : "Nominal Pressure"}</Label>
-            <NumInput value={p.discharge} placeholder="e.g. 1.0" onChange={(v) => upd("discharge", v)} />
-          </div>
-          {!isEmitterBase && (
+          
+          {is14483 ? (
             <>
               <div>
-                <Label className="text-xs">Specimen Length (mm) — Sr No 7 & 10</Label>
-                <NumInput value={p.specimenLength} placeholder="e.g. 150" onChange={(v) => upd("specimenLength", v)} />
+                <Label className="text-xs">Size</Label>
+                <Input value={p.size} placeholder="e.g. 2 inch" onChange={(e) => upd("size", e.target.value)} />
               </div>
               <div>
-                <Label className="text-xs">Applied Load (KN) — Sr No 8 & 13</Label>
-                <NumInput value={p.appliedLoad} placeholder="e.g. 0.06" onChange={(v) => upd("appliedLoad", v)} />
+                <Label className="text-xs">Model</Label>
+                <Input value={p.category} placeholder="e.g. B, Unregulated" onChange={(e) => upd("category", e.target.value)} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <Label className="text-xs">{!isEmitterBase ? "Size" : "Brand"}</Label>
+                <Input value={!isEmitterBase ? p.size : p.className} placeholder={!isEmitterBase ? "e.g. 16 mm" : "e.g. PARAGON"} onChange={(e) => upd(!isEmitterBase ? "size" : "className", e.target.value)} />
+              </div>
+              {isEmitterBase && (
+                <div>
+                  <Label className="text-xs">Size (LPH)</Label>
+                  <Input value={p.size} placeholder="e.g. 4 LPH" onChange={(e) => upd("size", e.target.value)} />
+                </div>
+              )}
+              {!isEmitterBase && (
+                <div>
+                  <Label className="text-xs">Class</Label>
+                  <Input value={p.className} placeholder="e.g. 2.5" onChange={(e) => upd("className", e.target.value)} />
+                </div>
+              )}
+              <div>
+                <Label className="text-xs">Category</Label>
+                <Input value={p.category} placeholder="e.g. B, Unregulated" onChange={(e) => upd("category", e.target.value)} />
               </div>
               <div>
-                <Label className="text-xs">Length Before Test (mm) — Sr No 13</Label>
-                <NumInput value={p.lengthBeforeTest ?? 150} placeholder="e.g. 150" onChange={(v) => upd("lengthBeforeTest", v)} />
+                <Label className="text-xs">{!isEmitterBase ? "Discharge (LPH)" : "Nominal Pressure"}</Label>
+                <NumInput value={p.discharge} placeholder="e.g. 1.0" onChange={(v) => upd("discharge", v)} />
               </div>
+              {!isEmitterBase && (
+                <>
+                  <div>
+                    <Label className="text-xs">Specimen Length (mm) — Sr No 7 & 10</Label>
+                    <NumInput value={p.specimenLength} placeholder="e.g. 150" onChange={(v) => upd("specimenLength", v)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Applied Load (KN) — Sr No 8 & 13</Label>
+                    <NumInput value={p.appliedLoad} placeholder="e.g. 0.06" onChange={(v) => upd("appliedLoad", v)} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Length Before Test (mm) — Sr No 13</Label>
+                    <NumInput value={p.lengthBeforeTest ?? 150} placeholder="e.g. 150" onChange={(v) => upd("lengthBeforeTest", v)} />
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -653,12 +677,50 @@ function PresetEditor({
       )}
 
       {is14483 && (
-        <Card className="p-12 border-2 border-dashed border-slate-200 bg-slate-50/50 text-center">
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-              <Pencil className="w-6 h-6" />
-            </div>
-            <p className="text-slate-500 font-medium italic">Standard-specific requirement fields for IS 14483 will be added here soon.</p>
+        <Card className="p-6 space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="font-semibold">Declared Values Table</h3>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const arr = p.is14483Table || [];
+                upd("is14483Table", [...arr, { pressure: 0, motiveFlow: 0, waterSuction: 0 }]);
+              }}
+            >
+              <Plus className="w-4 h-4 mr-1" /> Add Row
+            </Button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full border text-sm">
+              <thead>
+                <tr className="bg-muted">
+                  <th className="border p-2">Pressure (kg/cm²)</th>
+                  <th className="border p-2">Declared Motive Flow (LPH)</th>
+                  <th className="border p-2">Declared Water Suction (LPH)</th>
+                  <th className="border p-2 w-12"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(p.is14483Table || []).map((row, i) => (
+                  <tr key={i}>
+                    <td className="border p-1"><NumInput value={row.pressure} onChange={(v) => { const next = [...(p.is14483Table || [])]; next[i] = { ...row, pressure: v }; upd("is14483Table", next); }} /></td>
+                    <td className="border p-1"><NumInput value={row.motiveFlow} onChange={(v) => { const next = [...(p.is14483Table || [])]; next[i] = { ...row, motiveFlow: v }; upd("is14483Table", next); }} /></td>
+                    <td className="border p-1"><NumInput value={row.waterSuction} onChange={(v) => { const next = [...(p.is14483Table || [])]; next[i] = { ...row, waterSuction: v }; upd("is14483Table", next); }} /></td>
+                    <td className="border p-1 text-center">
+                      <Button size="icon" variant="ghost" onClick={() => upd("is14483Table", (p.is14483Table || []).filter((_, j) => j !== i))}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                    </td>
+                  </tr>
+                ))}
+                {(!p.is14483Table || p.is14483Table.length === 0) && (
+                  <tr>
+                    <td colSpan={4} className="border p-4 text-center text-muted-foreground italic">
+                      No data rows added. Click "Add Row" to start.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </Card>
       )}

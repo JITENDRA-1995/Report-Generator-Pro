@@ -117,12 +117,14 @@ export default function NewReport() {
     if (!batchTouched) setBatchNo(isoToBatch(dateOfMfg));
   }, [dateOfMfg, batchTouched]);
 
+  const isEmitterBase = currentStandard.id === "is13487" || currentStandard.id === "is14483";
+
   const overrides: Partial<BasicInfo> = {
     dateOfMfg: isoToDisplay(dateOfMfg),
     dateOfTest: isoToDisplay(dateOfTest),
     batchNo,
     mcNo,
-    qtyOfProduction: qty > 0 ? (currentStandard.id === "is13487" ? `${qty} NOS` : `${qty} Coil X ${coilLength} Mtr`) : "",
+    qtyOfProduction: qty > 0 ? (isEmitterBase ? `${qty} NOS` : `${qty} Coil X ${coilLength} Mtr`) : "",
     reportType,
     cbcPerformed,
     ...(currentStandard.id === "is13487" ? { discharge: "1.00 KG/CM2" } : {})
@@ -146,8 +148,7 @@ export default function NewReport() {
   const [processingProgress, setProcessingProgress] = useState(0);
 
   const downloadTemplate = () => {
-    const isIs13487 = currentStandard.id === "is13487";
-    const data = isIs13487
+    const data = isEmitterBase
       ? [{
           "Preset *": presets[0]?.name || "",
           "Date of Mfg *": todayIso(),
@@ -211,13 +212,12 @@ export default function NewReport() {
         };
 
         const generatedReports: ReportData[] = [];
-        const isIs13487 = currentStandard.id === "is13487";
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
           const pName = row["Preset *"];
           const targetPreset = presets.find((p: Preset) => p.name === pName) || presets[0];
           const sVal = parseFloat(row["Spacing (cm) *"]);
-          const targetSpacing = (!isIs13487 && targetPreset?.spacings)
+          const targetSpacing = (!isEmitterBase && targetPreset?.spacings)
             ? (targetPreset.spacings.find((s: any) => s.value === sVal) || targetPreset.spacings[0])
             : null;
           const mfgDate = parseExcelDate(row["Date of Mfg *"]);
@@ -229,14 +229,14 @@ export default function NewReport() {
 
           const coilLenVal = row["Coil Length (Mtr)"] ? parseInt(row["Coil Length (Mtr)"]) || 500 : 500;
           const batchOverrides: Partial<BasicInfo> = {
-            reportType: isIs13487 ? "Daily" : (row["Report Frequency"] === "Weekly" ? "Weekly" : "Daily"),
-            cbcPerformed: isIs13487 ? false : String(row["CBC Performed? (Carbon Black Content)"]).toLowerCase() === "yes",
+            reportType: isEmitterBase ? "Daily" : (row["Report Frequency"] === "Weekly" ? "Weekly" : "Daily"),
+            cbcPerformed: isEmitterBase ? false : String(row["CBC Performed? (Carbon Black Content)"]).toLowerCase() === "yes",
             dateOfMfg: isoToDisplay(mfgDate),
             dateOfTest: isoToDisplay(testDate),
             batchNo: batchStr,
-            mcNo: isIs13487 ? "" : String(row["M/C No *"] || ""),
+            mcNo: isEmitterBase ? "" : String(row["M/C No *"] || ""),
             qtyOfProduction: row["Qty of Production *"] ? (
-              isIs13487 
+              isEmitterBase 
                 ? `${row["Qty of Production *"]} NOS` 
                 : `${row["Qty of Production *"]} Coil X ${coilLenVal} Mtr`
             ) : "",
@@ -354,10 +354,9 @@ export default function NewReport() {
     );
   }
 
-  const isIs13487 = currentStandard.id === "is13487";
-  const isMcRequired = !isIs13487;
-  const isSpacingRequired = !isIs13487;
-  const requiredOk = presetId && (!isSpacingRequired || spacingId) && dateOfMfg && dateOfTest && batchNo.trim() && (!isMcRequired || mcNo.trim()) && qty > 0 && (isIs13487 || coilLength > 0);
+  const isMcRequired = !isEmitterBase;
+  const isSpacingRequired = !isEmitterBase;
+  const requiredOk = presetId && (!isSpacingRequired || spacingId) && dateOfMfg && dateOfTest && batchNo.trim() && (!isMcRequired || mcNo.trim()) && qty > 0 && (isEmitterBase || coilLength > 0);
 
   if (step === "initial") {
     return (
@@ -393,7 +392,7 @@ export default function NewReport() {
                   <textarea className="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={manualDischargeText} onChange={(e) => setManualDischargeText(e.target.value)} />
                 </div>
               )}
-                {!isIs13487 && currentStandard.id !== "is14483" && (
+                {!isEmitterBase && (
                   <div className="space-y-3">
                     <Label className="text-xs font-black text-slate-500 uppercase tracking-widest">M/C No.</Label>
                     <Input 
@@ -438,7 +437,7 @@ export default function NewReport() {
               <div><Label>Date of Mfg *</Label><Input type="date" value={dateOfMfg} onChange={(e) => setDateOfMfg(e.target.value)} /></div>
               <div><Label>Date of Test *</Label><Input type="date" value={dateOfTest} onChange={(e) => setDateOfTest(e.target.value)} /></div>
               <div><Label>Batch No *</Label><Input value={batchNo} onChange={(e) => { setBatchTouched(true); setBatchNo(e.target.value); }} /></div>
-              {currentStandard.id === "is13487" ? (
+              {isEmitterBase ? (
                 <div>
                   <Label>Qty *</Label>
                   <div className="flex items-center gap-2">
@@ -453,7 +452,7 @@ export default function NewReport() {
                 </div>
               ) : (
                 <>
-                  {currentStandard.id !== "is13487" && (
+                  {!isEmitterBase && (
                     <div>
                       <Label>M/C No *</Label>
                       <Input list="mc-no-options" value={mcNo} onChange={(e) => setMcNo(e.target.value)} />

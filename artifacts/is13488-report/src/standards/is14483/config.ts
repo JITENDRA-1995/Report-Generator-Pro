@@ -27,7 +27,34 @@ export const IS14483_CONFIG = {
       color: "bg-amber-50 text-amber-700",
     },
   ],
-  defaultPresets: [],
+  defaultPresets: [
+    {
+      id: "a6817887-fc30-4374-8a19-55e19abeeb20",
+      name: "V2",
+      size: "2\"(50MM)",
+      className: "",
+      category: "V2",
+      is14483Table: [
+        { pressure: 1, motiveFlow: 7260, waterSuction: 1175 },
+        { pressure: 1.5, motiveFlow: 8460, waterSuction: 1170 },
+        { pressure: 2, motiveFlow: 9450, waterSuction: 1160 },
+        { pressure: 2.5, motiveFlow: 10380, waterSuction: 1155 }
+      ]
+    },
+    {
+      id: "de5a5d8f-c379-4244-8ab8-79f12b4aca1f",
+      name: "V1",
+      size: "1\"(25MM)",
+      className: "",
+      category: "V1",
+      is14483Table: [
+        { pressure: 1, motiveFlow: 4380, waterSuction: 158 },
+        { pressure: 1.25, motiveFlow: 4740, waterSuction: 157 },
+        { pressure: 1.5, motiveFlow: 4920, waterSuction: 155 },
+        { pressure: 2, motiveFlow: 5340, waterSuction: 151 }
+      ]
+    }
+  ],
   defaultSpecs: [],
   storage: {
     reportsKey: "is14483_reports_v1",

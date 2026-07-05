@@ -118,6 +118,20 @@
   overflow: hidden;
   border: none !important;
 }
+.report-page.print-landscape {
+  width: 297mm;
+  min-height: 210mm;
+  height: 210mm;
+  padding: 16px 24px !important;
+}
+.report-page.print-landscape td:not(.p-0), 
+.report-page.print-landscape th:not(.p-0) {
+  padding-top: 0px !important;
+  padding-bottom: 9.5px !important;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+  vertical-align: middle !important;
+}
 .report-page:first-of-type { 
   page-break-before: avoid !important;
   break-before: avoid !important;
@@ -222,6 +236,19 @@
     height: 294.1mm !important;
     overflow: hidden;
     border: none !important;
+  }
+  .report-page.print-landscape {
+    width: 297mm !important;
+    height: 210mm !important;
+    padding: 16px 24px !important;
+  }
+  .report-page.print-landscape td:not(.p-0), 
+  .report-page.print-landscape th:not(.p-0) {
+    padding-top: 0px !important;
+    padding-bottom: 9.5px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    vertical-align: middle !important;
   }
   .report-page:first-of-type {
     page-break-before: avoid !important;

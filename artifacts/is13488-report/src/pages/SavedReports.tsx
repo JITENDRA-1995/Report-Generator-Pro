@@ -19,7 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getReports, deleteReport } from "@/lib/storage";
 import type { ReportData } from "@/lib/types";
-import { getCurrentStandard } from "@/standards/registry";
+import { getCurrentStandard, getStandard } from "@/standards/registry";
 import { HeaderActions } from "@/components/HeaderActions";
 // JSZip removed as requested
 
@@ -71,12 +71,17 @@ function getMonthStr(dateStr: string): string {
 
 export default function SavedReports() {
   const getReportFilename = (r: ReportData): string => {
-    const is13487 = r.basicInfo.formatNo?.includes("13487");
+    const is13487 = r.basicInfo.formatNo?.includes("13487") || r.standardId === "is13487";
+    const is14483 = r.is14483_hydrostatic !== undefined || r.standardId === "is14483" || getCurrentStandard().id === "is14483";
+    
     let filename = `${r.basicInfo.mcNo}_${r.basicInfo.batchNo}`;
     if (is13487) {
       const size = r.basicInfo.size || "";
       const sizeClean = size.toUpperCase().replace(/\s*LPH\s*/i, "").trim();
       filename = `${sizeClean} LPH ${r.basicInfo.batchNo}`;
+    } else if (is14483) {
+      const model = r.basicInfo.category || "V1";
+      filename = `${model} - ${r.basicInfo.batchNo}`;
     }
     return filename.replace(/[\/\\?%*:|"<>]/g, '-');
   };
@@ -230,7 +235,11 @@ export default function SavedReports() {
       
       if (!jsPDFLib || !html2canvasLib) throw new Error("PDF libraries not loaded");
       
-      const pdf = new jsPDFLib('p', 'mm', [210, 294.1]);
+      const isLandscape = pages[0].classList.contains('print-landscape');
+      const orientation = isLandscape ? 'l' : 'p';
+      const format = isLandscape ? [297, 210] : [210, 294.1];
+      
+      const pdf = new jsPDFLib(orientation, 'mm', format);
       
       for (let i = 0; i < pages.length; i++) {
         const canvas = await html2canvasLib(pages[i], {
@@ -243,8 +252,8 @@ export default function SavedReports() {
         });
         
         const imgData = canvas.toDataURL('image/jpeg', 0.9);
-        if (i > 0) pdf.addPage([210, 294.1], 'p');
-        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 294.1);
+        if (i > 0) pdf.addPage(format, orientation);
+        pdf.addImage(imgData, 'JPEG', 0, 0, format[0], format[1]);
       }
       
       return pdf.output('blob');
@@ -265,9 +274,9 @@ export default function SavedReports() {
       link.download = `${filename}.pdf`;
       link.click();
       URL.revokeObjectURL(url);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Export failed:", err);
-      alert("Failed to generate PDF. Please try again.");
+      alert("Failed to generate PDF. Error: " + (err.message || String(err)));
     } finally {
       setIsExporting(false);
     }
@@ -346,7 +355,12 @@ export default function SavedReports() {
         
         if (!jsPDFLib || !html2canvasLib) throw new Error("PDF libraries not loaded");
         
-        const pdf = new jsPDFLib('p', 'mm', [210, 294.1]);
+        const isLandscape = pages[0].classList.contains('print-landscape');
+        const orientation = isLandscape ? 'l' : 'p';
+        const format = isLandscape ? [297, 210] : [210, 294.1];
+        
+        const pdf = new jsPDFLib(orientation, 'mm', format);
+        
         for (let i = 0; i < pages.length; i++) {
           const canvas = await html2canvasLib(pages[i], {
             scale: 3,
@@ -357,13 +371,13 @@ export default function SavedReports() {
             logging: false
           });
           const imgData = canvas.toDataURL('image/jpeg', 0.95);
-          if (i > 0) pdf.addPage([210, 294.1], 'p');
-          pdf.addImage(imgData, 'JPEG', 0, 0, 210, 294.1);
+          if (i > 0) pdf.addPage(format, orientation);
+          pdf.addImage(imgData, 'JPEG', 0, 0, format[0], format[1]);
         }
         pdf.save(`${filename}.pdf`);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Export failed:", err);
-        alert("Failed to generate PDF. Please try again.");
+        alert("Failed to generate PDF. Error: " + (err.message || String(err)));
       } finally {
         setIsExporting(false);
       }
@@ -392,7 +406,7 @@ export default function SavedReports() {
         </HeaderActions>
         <div className="py-8">
           {(() => {
-            const Template = getCurrentStandard().components.Template;
+            const Template = (getStandard(viewing.standardId) || getCurrentStandard()).components.Template;
             return <Template data={viewing} isExporting={isExporting} />;
           })()}
         </div>
@@ -586,7 +600,7 @@ export default function SavedReports() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-slate-900 leading-tight">
-                      {r.basicInfo.mcNo} - {r.basicInfo.batchNo}
+                      {getReportFilename(r)}
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">
                       {r.basicInfo.dateOfTest} • {r.basicInfo.size} • {r.basicInfo.className}
@@ -712,9 +726,9 @@ export default function SavedReports() {
 
       {/* Hidden container for direct downloads */}
       {downloadingReport && (
-        <div id="download-target" style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+        <div id="download-target" style={{ position: 'absolute', left: '-9999px', top: 0, width: downloadingReport.standardId === 'is14483' ? '297mm' : '210mm' }}>
           {(() => {
-            const Template = getCurrentStandard().components.Template;
+            const Template = (getStandard(downloadingReport.standardId) || getCurrentStandard()).components.Template;
             return <Template data={downloadingReport} isExporting={true} />;
           })()}
         </div>

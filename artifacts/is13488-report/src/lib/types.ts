@@ -95,6 +95,13 @@ export interface ReportData {
   tension: TensionTest;
   pressureTest: PressureRow[];
   forcedM?: number;
+
+  // IS 14483 specific
+  is14483_hydrostatic?: ("Confirmed" | "Failed")[];
+  is14483_performanceA?: { inlet: number; outlet: number; declaredMotive: number; observedMotive: number; declaredSuction: number; observedSuction: number }[];
+  is14483_performanceB?: { inlet: number; outlet: number; declaredMotive: number; observedMotive: number; declaredSuction: number; observedSuction: number }[];
+  is14483_pressureDropA?: { inlet: number; declaredDrop: number; actualDrop: number }[];
+  is14483_pressureDropB?: { inlet: number; declaredDrop: number; actualDrop: number }[];
 }
 
 // ===== Presets =====
@@ -126,6 +133,12 @@ export interface DischargePerPressure {
   r23Max?: number;
 }
 
+export interface IS14483TableEntry {
+  pressure: number;
+  motiveFlow: number;
+  waterSuction: number;
+}
+
 export interface Preset {
   id: string;
   name: string;
@@ -146,6 +159,7 @@ export interface Preset {
   wallThickness: ValRange;
   declaredDischargePerPressure: DischargePerPressure[];
   spacings: SpacingOption[];
+  is14483Table?: IS14483TableEntry[];
   isImported?: boolean;
 }
 

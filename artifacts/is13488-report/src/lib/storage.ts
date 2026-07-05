@@ -136,13 +136,28 @@ export function getPresets(): Preset[] {
       }
       return defaults;
     }
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Preset[];
     if (parsed.length === 0 && defaults.length > 0) {
       savePresets(defaults);
       if (!getDefaultPresetId()) {
         setDefaultPresetId(defaults[0].id);
       }
       return defaults;
+    }
+    const currentId = getCurrentStandardId();
+    if (currentId === "is14483") {
+      return parsed.map(p => {
+        const clean = {
+          id: p.id,
+          name: p.name,
+          size: p.size || "",
+          className: p.className || "",
+          category: p.category || "",
+          is14483Table: p.is14483Table || [],
+        } as any;
+        if (p.isImported !== undefined) clean.isImported = p.isImported;
+        return clean as Preset;
+      });
     }
     return parsed;
   } catch {
@@ -151,10 +166,39 @@ export function getPresets(): Preset[] {
 }
 
 export function savePresets(list: Preset[]): void {
+  const currentId = getCurrentStandardId();
+  if (currentId === "is14483") {
+    list = list.map(p => {
+      const clean = {
+        id: p.id,
+        name: p.name,
+        size: p.size || "",
+        className: p.className || "",
+        category: p.category || "",
+        is14483Table: p.is14483Table || [],
+      } as any;
+      if (p.isImported !== undefined) clean.isImported = p.isImported;
+      return clean as Preset;
+    });
+  }
   localStorage.setItem(getKeys().presetsKey, JSON.stringify(list));
 }
 
 export function upsertPreset(p: Preset): void {
+  const currentId = getCurrentStandardId();
+  if (currentId === "is14483") {
+    const clean = {
+      id: p.id,
+      name: p.name,
+      size: p.size || "",
+      className: p.className || "",
+      category: p.category || "",
+      is14483Table: p.is14483Table || [],
+    } as any;
+    if (p.isImported !== undefined) clean.isImported = p.isImported;
+    p = clean as Preset;
+  }
+
   const all = getPresets();
   const idx = all.findIndex((x) => x.id === p.id);
   if (idx >= 0) all[idx] = p;
@@ -219,6 +263,18 @@ export function setDefaultPresetId(id: string): void {
 }
 
 export function blankPreset(): Preset {
+  const currentId = getCurrentStandardId();
+  if (currentId === "is14483") {
+    return {
+      id: v4(),
+      name: "",
+      size: "",
+      className: "",
+      category: "V1",
+      is14483Table: [],
+    } as any as Preset;
+  }
+
   return {
     id: v4(),
     name: "",

@@ -9,7 +9,9 @@ import { IS13487Template as Temp13487 } from "./is13487/Template";
 import { IS13487Wizard } from "./is13487/Wizard";
 
 import { IS14483_CONFIG } from "./is14483/config";
-
+import { is14483Generator } from "./is14483/generator";
+import Template14483 from "./is14483/Template";
+import { IS14483Wizard } from "./is14483/Wizard";
 import type { StandardDefinition } from "./types";
 
 export const STANDARDS: StandardDefinition[] = [
@@ -37,14 +39,13 @@ export const STANDARDS: StandardDefinition[] = [
   },
   {
     ...IS14483_CONFIG,
-    // Using 13488 components as placeholders
     generator: {
-      generateRandom: gen13488,
-      getEmpty: empty13488,
+      generateRandom: is14483Generator.generateRandom,
+      getEmpty: is14483Generator.getEmpty,
     },
     components: {
-      Wizard: IS13488Wizard,
-      Template: Temp13488,
+      Wizard: IS14483Wizard,
+      Template: Template14483,
     }
   }
 ];
