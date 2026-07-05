@@ -3,19 +3,19 @@ import { FilePlus, FolderOpen, Settings } from "lucide-react";
 export const IS14483_CONFIG = {
   id: "is14483",
   version: "2024",
-  fullName: "IS 14483 : 2024",
+  fullName: "IS 14483 (PART - 1) : 2024",
   homeItems: [
     {
       to: "/new",
       title: "New 14483 Report",
-      desc: "Generate IS 14483 : 2024 technical test reports.",
+      desc: "Generate IS 14483 (PART - 1) : 2024 technical test reports.",
       icon: FilePlus,
       color: "bg-emerald-50 text-emerald-700",
     },
     {
       to: "/saved",
       title: "Records",
-      desc: "View archived IS 14483 reports.",
+      desc: "View archived IS 14483 (PART - 1) : 2024 reports.",
       icon: FolderOpen,
       color: "bg-blue-50 text-blue-700",
     },

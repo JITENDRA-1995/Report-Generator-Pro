@@ -16,7 +16,7 @@ export default function Template({ data, isExporting = false, customHeaders }: {
       <tr className="border-b border-black break-inside-avoid">
         <td className="border-r border-black font-bold text-center p-1 align-top">{titleLabel}</td>
         <td colSpan={4} className="p-0">
-          <div className="font-bold border-b border-black pt-0 pb-[9.5px] px-2 text-left text-[14px]" style={{ backgroundColor: '#f3f4f6' }}>6.2 & 6.2.1: Performance Test</div>
+          <div className="font-bold border-b border-black pt-0 pb-[9.5px] px-2 text-left text-[14px]" style={{ backgroundColor: '#f3f4f6' }}>6.2 : Performance Test</div>
           <table className="w-full text-center border-collapse">
             <thead>
               <tr className="text-[12px]">
@@ -108,7 +108,7 @@ export default function Template({ data, isExporting = false, customHeaders }: {
                 </td>
                 <td className="border-r border-black p-1 align-middle">
                   <h1 className="text-[19px] font-bold tracking-wide whitespace-nowrap">TEST REPORT - VENTURI INJECTOR</h1>
-                  <div className="font-bold text-[14px] whitespace-nowrap mt-1">(As per IS 14483 (Part-1):1997 with Amnd. No.2)</div>
+                  <div className="font-bold text-[14px] whitespace-nowrap mt-1">(As per IS 14483 (PART - 1) : 2024)</div>
                 </td>
                 <td className="w-[280px] p-0 align-middle">
                   <table className="w-full h-full text-left text-[13px]">
