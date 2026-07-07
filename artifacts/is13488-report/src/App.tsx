@@ -8,8 +8,15 @@ import NewReport from "@/pages/NewReport";
 import SavedReports from "@/pages/SavedReports";
 import DataManagement from "@/pages/DataManagement";
 import Login from "@/pages/Login";
+import Welcome from "@/pages/Welcome";
+import SmsDashboard from "@/pages/SmsDashboard";
+import SmsUnderDevelopment from "@/pages/SmsUnderDevelopment";
+import SmsStandardDetail from "@/pages/SmsStandardDetail";
+import SmsEntryPanel from "@/pages/SmsEntryPanel";
+import SmsSettings from "@/pages/SmsSettings";
 
 import { Layout } from "@/components/Layout";
+import { SmsLayout } from "@/components/SmsLayout";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
@@ -37,7 +44,17 @@ function Router() {
       if (!session) navigate("/login");
     });
 
-    return () => subscription.unsubscribe();
+    const handleWheel = (e: WheelEvent) => {
+      if (document.activeElement && (document.activeElement as HTMLInputElement).type === "number") {
+        (document.activeElement as HTMLInputElement).blur();
+      }
+    };
+    document.addEventListener("wheel", handleWheel);
+
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener("wheel", handleWheel);
+    };
   }, [navigate]);
 
   if (loading) {
@@ -58,15 +75,47 @@ function Router() {
   }
 
   return (
-    <Layout>
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/new" component={NewReport} />
-        <Route path="/saved" component={SavedReports} />
-        <Route path="/data" component={DataManagement} />
-        <Route component={NotFound} />
-      </Switch>
-    </Layout>
+    <Switch>
+      <Route path="/">
+        <Welcome />
+      </Route>
+      <Route path="/sms">
+        <SmsLayout>
+          <SmsDashboard />
+        </SmsLayout>
+      </Route>
+      <Route path="/sms/develop">
+        <SmsLayout>
+          <SmsUnderDevelopment />
+        </SmsLayout>
+      </Route>
+      <Route path="/sms/standard/:id">
+        <SmsLayout>
+          <SmsStandardDetail />
+        </SmsLayout>
+      </Route>
+      <Route path="/sms/standard/:id/:type">
+        <SmsLayout>
+          <SmsEntryPanel />
+        </SmsLayout>
+      </Route>
+      <Route path="/sms/settings">
+        <SmsLayout>
+          <SmsSettings />
+        </SmsLayout>
+      </Route>
+      <Route>
+        <Layout>
+          <Switch>
+            <Route path="/reporting" component={Home} />
+            <Route path="/new" component={NewReport} />
+            <Route path="/saved" component={SavedReports} />
+            <Route path="/data" component={DataManagement} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </Route>
+    </Switch>
   );
 }
  

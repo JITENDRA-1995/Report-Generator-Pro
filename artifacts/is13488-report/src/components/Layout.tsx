@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, FilePlus, FolderOpen, Settings, LogOut } from "lucide-react";
+import { Home, FilePlus, FolderOpen, Settings, LogOut, LayoutDashboard } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const navItems = [
-    { href: "/", label: "Home", icon: Home },
+    { href: "/reporting", label: "Home", icon: Home },
     { href: "/new", label: "New Report", icon: FilePlus },
     { href: "/saved", label: "Saved Reports", icon: FolderOpen },
     { href: "/data", label: "Data Management", icon: Settings },
@@ -31,7 +31,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <header className="no-print border-b bg-white sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <Link href="/" className="font-bold text-lg flex items-center gap-2 text-emerald-700">
+            <Link href="/reporting" className="font-bold text-lg flex items-center gap-2 text-emerald-700">
               <span className="hidden sm:inline">Paragon Reports</span>
               <span className="sm:hidden italic">Paragon</span>
             </Link>
@@ -55,6 +55,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-50 mr-2">
               {currentStandard.id.toUpperCase()}
             </div>
+            {location === "/reporting" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/")}
+                className="text-xs text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border-slate-200 hover:border-indigo-200 h-8 gap-1.5"
+                title="Switch Module"
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Switch Module</span>
+              </Button>
+            )}
             <Button 
               variant="ghost" 
               size="icon" 
