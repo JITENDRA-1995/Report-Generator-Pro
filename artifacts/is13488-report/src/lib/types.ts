@@ -79,6 +79,7 @@ export interface ReportData {
   id: string;
   createdAt: string;
   presetId?: string;
+  standardId?: string;
   basicInfo: BasicInfo;
   dimensions: DimensionRow[];
   visualAppearance: string;

@@ -406,7 +406,7 @@ export default function SavedReports() {
         </HeaderActions>
         <div className="py-8">
           {(() => {
-            const Template = (getStandard(viewing.standardId) || getCurrentStandard()).components.Template;
+            const Template = (getStandard(viewing.standardId || "") || getCurrentStandard()).components.Template;
             return <Template data={viewing} isExporting={isExporting} />;
           })()}
         </div>
@@ -728,7 +728,7 @@ export default function SavedReports() {
       {downloadingReport && (
         <div id="download-target" style={{ position: 'absolute', left: '-9999px', top: 0, width: downloadingReport.standardId === 'is14483' ? '297mm' : '210mm' }}>
           {(() => {
-            const Template = (getStandard(downloadingReport.standardId) || getCurrentStandard()).components.Template;
+            const Template = (getStandard(downloadingReport.standardId || "") || getCurrentStandard()).components.Template;
             return <Template data={downloadingReport} isExporting={true} />;
           })()}
         </div>

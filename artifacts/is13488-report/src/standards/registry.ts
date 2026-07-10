@@ -39,6 +39,7 @@ export const STANDARDS: StandardDefinition[] = [
   },
   {
     ...IS14483_CONFIG,
+    defaultPresets: IS14483_CONFIG.defaultPresets as any,
     generator: {
       generateRandom: is14483Generator.generateRandom,
       getEmpty: is14483Generator.getEmpty,

@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useParams, useLocation } from "wouter";
+import { defaultConsignees } from "@/lib/defaultConsignees";
+import { supabase } from "@/lib/supabase";
+import * as smsStorage from "@/lib/smsStorage";
 import { 
   ChevronRight, 
   ChevronDown,
@@ -15,7 +18,9 @@ import {
   Download,
   Users,
   FileSpreadsheet,
-  UploadCloud
+  UploadCloud,
+  Workflow,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as XLSX from "xlsx";
@@ -97,6 +102,13 @@ export default function SmsEntryPanel() {
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
   };
 
+  // Helper to normalize/clean consignee names for matching (e.g. "Siddhi Corporation / prantij" -> "Siddhi Corporation")
+  const getCleanConsigneeName = (name: string): string => {
+    if (!name) return "";
+    let clean = name.split("/")[0].split("-")[0].split("(")[0].trim();
+    return clean.replace(/\s+/g, " ");
+  };
+
   const currentStandard = smsStandards[id || ""] || { name: "SMS", subName: "Standard Operations" };
   const sizes = standardSizes[id || ""] || [];
   const entryTypeLabels: Record<string, string> = {
@@ -110,6 +122,8 @@ export default function SmsEntryPanel() {
   const entryTypeLabel = entryTypeLabels[type || ""] || "Stock Operation";
 
   const [selectedSize, setSelectedSize] = useState<string>("");
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isOnline] = useState<boolean>(smsStorage.isCloudEnabled());
 
   // Common Form States
   const [entryDate, setEntryDate] = useState<string>(new Date().toISOString().split("T")[0]);
@@ -176,12 +190,18 @@ export default function SmsEntryPanel() {
   // Consignee Report States
   const [selectedConsignees, setSelectedConsignees] = useState<string[]>([]);
   const [consigneeSearch, setConsigneeSearch] = useState<string>("");
+  const [showSavedOnly, setShowSavedOnly] = useState<boolean>(false);
+  const [exportFilename, setExportFilename] = useState<string>(() => {
+    const isCode = id ? id.replace("is", "") : "";
+    return isCode ? `PARAGON CONSIGNEE - ${isCode}` : "PARAGON CONSIGNEE";
+  });
   const [consigneeReportMonth, setConsigneeReportMonth] = useState<string>(() => MONTHS[new Date().getMonth()]);
   const [consigneeReportYear, setConsigneeReportYear] = useState<string>(() => new Date().getFullYear().toString());
   // Each generated row keeps its own month+year so multi-month accumulation works
   type ConsigneeReportRow = { consigneeName: string; qty: number; month: string; year: string };
   const [consigneeReportRows, setConsigneeReportRows] = useState<ConsigneeReportRow[]>([]);
   const [importedConsigneeIds, setImportedConsigneeIds] = useState<Set<string>>(new Set());
+
   const [consigneeEditModal, setConsigneeEditModal] = useState<{
     show: boolean;
     consigneeName: string;
@@ -196,6 +216,23 @@ export default function SmsEntryPanel() {
     email: string;
   } | null>(null);
 
+  const registeredNames = useMemo(() => {
+    const names = new Set<string>();
+    const stored = localStorage.getItem("sms_consignees");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        parsed.forEach((c: any) => {
+          const name = typeof c === "string" ? c : c.name || "";
+          if (name) {
+            names.add(name.toLowerCase());
+          }
+        });
+      } catch (e) {}
+    }
+    return names;
+  }, [consigneeEditModal]);
+
   useEffect(() => {
     initializeDefaultConversions();
   }, []);
@@ -206,6 +243,12 @@ export default function SmsEntryPanel() {
       setExportLedgerSelectedSizes(sizes);
     }
   }, [id, sizes]);
+
+  useEffect(() => {
+    if (!id) return;
+    const isCode = id.replace("is", "");
+    setExportFilename(`PARAGON CONSIGNEE - ${isCode}`);
+  }, [id]);
 
   // Load imported consignee IDs from localStorage once id is available
   useEffect(() => {
@@ -366,32 +409,106 @@ export default function SmsEntryPanel() {
     }
   }, [type, id, selectedSize, stockMonth, stockYear, prodEntries.length, dispEntries.length, dismissedInitModalFor]);
 
-  // Load production and dispatch entries dynamically
+  // Load production and dispatch entries dynamically with Cloud Sync
   useEffect(() => {
-    if (id) {
-      const pStored = localStorage.getItem(`sms_prod_${id}`);
-      if (pStored) {
-        try {
-          setProdEntries(JSON.parse(pStored));
-        } catch (e) {
-          console.error("Error parsing production entries:", e);
-        }
-      } else {
-        setProdEntries([]);
-      }
+    if (!id) return;
 
-      const dStored = localStorage.getItem(`sms_disp_${id}`);
-      if (dStored) {
-        try {
-          setDispEntries(JSON.parse(dStored));
-        } catch (e) {
-          console.error("Error parsing dispatch entries:", e);
-        }
-      } else {
-        setDispEntries([]);
+    // Load local storage first for fast response
+    const pStored = localStorage.getItem(`sms_prod_${id}`);
+    const dStored = localStorage.getItem(`sms_disp_${id}`);
+    if (pStored) {
+      try {
+        setProdEntries(JSON.parse(pStored));
+      } catch (e) {
+        console.error("Error parsing local production:", e);
       }
     }
-  }, [id, type, entries]);
+    if (dStored) {
+      try {
+        setDispEntries(JSON.parse(dStored));
+      } catch (e) {
+        console.error("Error parsing local dispatch:", e);
+      }
+    }
+
+    setIsSyncing(true);
+    Promise.all([
+      smsStorage.syncProductionFromCloud(id),
+      smsStorage.syncDispatchFromCloud(id),
+      smsStorage.syncStartingStocksFromCloud(id)
+    ]).then(([prod, disp]) => {
+      setProdEntries(prod);
+      setDispEntries(disp);
+      setIsSyncing(false);
+    }).catch(err => {
+      console.error("Cloud sync failed:", err);
+      setIsSyncing(false);
+    });
+
+    if (!smsStorage.isCloudEnabled()) return;
+
+    const channel = supabase
+      .channel(`sms-realtime-${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sms_production", filter: `standard_id=eq.${id}` }, (payload) => {
+        if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+          const newEntry = {
+            ...payload.new.data,
+            id: payload.new.id,
+            date: payload.new.date,
+            size: payload.new.size
+          } as ProductionEntry;
+          setProdEntries(prev => {
+            const all = prev.filter(e => e.id !== newEntry.id);
+            all.unshift(newEntry);
+            localStorage.setItem(`sms_prod_${id}`, JSON.stringify(all));
+            return all;
+          });
+        } else if (payload.eventType === "DELETE") {
+          const deletedId = payload.old.id;
+          setProdEntries(prev => {
+            const all = prev.filter(e => e.id !== deletedId);
+            localStorage.setItem(`sms_prod_${id}`, JSON.stringify(all));
+            return all;
+          });
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sms_dispatch", filter: `standard_id=eq.${id}` }, (payload) => {
+        if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+          const newEntry = {
+            ...payload.new.data,
+            id: payload.new.id,
+            date: payload.new.date,
+            size: payload.new.size,
+            partyName: payload.new.party_name,
+            billNo: payload.new.bill_no,
+            batchNo: payload.new.batch_no
+          } as DispatchEntry;
+          setDispEntries(prev => {
+            const all = prev.filter(e => e.id !== newEntry.id);
+            all.unshift(newEntry);
+            localStorage.setItem(`sms_disp_${id}`, JSON.stringify(all));
+            return all;
+          });
+        } else if (payload.eventType === "DELETE") {
+          const deletedId = payload.old.id;
+          setDispEntries(prev => {
+            const all = prev.filter(e => e.id !== deletedId);
+            localStorage.setItem(`sms_disp_${id}`, JSON.stringify(all));
+            return all;
+          });
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sms_starting_stocks", filter: `standard_id=eq.${id}` }, (payload) => {
+        if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+          localStorage.setItem(payload.new.id, payload.new.val.toString());
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id]);
 
   useEffect(() => {
     if (sizes.length > 0 && !selectedSize) {
@@ -406,28 +523,89 @@ export default function SmsEntryPanel() {
     }
   }, [id]);
 
-  // Load entries from localStorage
+  // Keep entries view in sync with prodEntries or dispEntries changes
   useEffect(() => {
-    if (id) {
-      const storageKey = type === "production" ? `sms_prod_${id}` : `sms_disp_${id}`;
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        try {
-          setEntries(JSON.parse(stored));
-        } catch (e) {
-          console.error("Error parsing stored entries:", e);
-          setEntries([]);
-        }
-      } else {
-        setEntries([]);
+    if (type === "production") {
+      setEntries(prodEntries);
+    } else {
+      setEntries(dispEntries);
+    }
+  }, [type, prodEntries, dispEntries]);
+
+  const saveFullProductionList = async (list: ProductionEntry[]) => {
+    setProdEntries(list);
+    localStorage.setItem(`sms_prod_${id}`, JSON.stringify(list));
+    if (smsStorage.isCloudEnabled()) {
+      const payload = list.map(e => ({
+        id: e.id,
+        standard_id: id || "",
+        date: e.date,
+        size: e.size,
+        data: e
+      }));
+      await supabase.from("sms_production").upsert(payload);
+    }
+  };
+
+  const saveFullDispatchList = async (list: DispatchEntry[]) => {
+    setDispEntries(list);
+    localStorage.setItem(`sms_disp_${id}`, JSON.stringify(list));
+    if (smsStorage.isCloudEnabled()) {
+      const payload = list.map(e => ({
+        id: e.id,
+        standard_id: id || "",
+        date: e.date,
+        size: e.size,
+        party_name: e.partyName,
+        bill_no: e.billNo,
+        batch_no: e.batchNo,
+        data: e
+      }));
+      await supabase.from("sms_dispatch").upsert(payload);
+    }
+  };
+
+  const saveEntries = async (newEntries: any[]) => {
+    setEntries(newEntries);
+    if (type === "production") {
+      const oldEntries = prodEntries;
+      setProdEntries(newEntries);
+      localStorage.setItem(`sms_prod_${id}`, JSON.stringify(newEntries));
+
+      const newIds = new Set(newEntries.map(e => e.id));
+      const deleted = oldEntries.filter(e => !newIds.has(e.id));
+      for (const e of deleted) {
+        await smsStorage.deleteProductionEntry(id || "", e.id);
+      }
+
+      const oldMap = new Map(oldEntries.map(e => [e.id, e]));
+      const changedOrNew = newEntries.filter(e => {
+        const old = oldMap.get(e.id);
+        return !old || JSON.stringify(old) !== JSON.stringify(e);
+      });
+      for (const e of changedOrNew) {
+        await smsStorage.saveProductionEntry(id || "", e);
+      }
+    } else {
+      const oldEntries = dispEntries;
+      setDispEntries(newEntries);
+      localStorage.setItem(`sms_disp_${id}`, JSON.stringify(newEntries));
+
+      const newIds = new Set(newEntries.map(e => e.id));
+      const deleted = oldEntries.filter(e => !newIds.has(e.id));
+      for (const e of deleted) {
+        await smsStorage.deleteDispatchEntry(id || "", e.id);
+      }
+
+      const oldMap = new Map(oldEntries.map(e => [e.id, e]));
+      const changedOrNew = newEntries.filter(e => {
+        const old = oldMap.get(e.id);
+        return !old || JSON.stringify(old) !== JSON.stringify(e);
+      });
+      for (const e of changedOrNew) {
+        await smsStorage.saveDispatchEntry(id || "", e);
       }
     }
-  }, [id, type]);
-
-  const saveEntries = (newEntries: any[]) => {
-    setEntries(newEntries);
-    const storageKey = type === "production" ? `sms_prod_${id}` : `sms_disp_${id}`;
-    localStorage.setItem(storageKey, JSON.stringify(newEntries));
   };
 
   const handleAddEntry = (e: React.FormEvent) => {
@@ -481,7 +659,7 @@ export default function SmsEntryPanel() {
 
       // Get matching production entry
       const matchingProd = prodEntries.find(
-        (entry) => entry.date === entryDate && entry.size === selectedSize
+        (entry) => datesMatch(entry.date, entryDate) && entry.size === selectedSize
       );
 
       const pQty = (id === "is13488" || id === "is12786") ? (matchingProd ? (matchingProd.mtr || 0) : 0) :
@@ -567,7 +745,7 @@ export default function SmsEntryPanel() {
 
     return entriesList.map((entry) => {
       const isFirst = dateToFirstId[entry.date] === entry.id;
-      const matchingProd = prodEntries.find(p => p.date === entry.date && p.size === targetSize);
+      const matchingProd = prodEntries.find(p => datesMatch(p.date, entry.date) && p.size === targetSize);
       
       if (dateRemainingQty[entry.date] === undefined) {
         let pQty = 0;
@@ -675,7 +853,7 @@ export default function SmsEntryPanel() {
 
   // Get matching production entry for current form selections
   const currentMatchingProd = prodEntries.find(
-    (entry) => entry.date === entryDate && entry.size === selectedSize
+    (entry) => datesMatch(entry.date, entryDate) && entry.size === selectedSize
   );
 
   // Dispatch computations
@@ -801,8 +979,8 @@ export default function SmsEntryPanel() {
         if (dt > todayStr) break;
 
         // Get logs for selected size and date
-        const dProds = sizeProdEntries.filter(e => e.date === dt);
-        const dDisps = sizeDispEntries.filter(e => e.date === dt);
+        const dProds = sizeProdEntries.filter(e => datesMatch(e.date, dt));
+        const dDisps = sizeDispEntries.filter(e => datesMatch(e.date, dt));
 
         if (dDisps.length > 0) {
           dDisps.forEach((d, idx) => {
@@ -1107,8 +1285,14 @@ export default function SmsEntryPanel() {
   };
 
   // Parser helper
-  const parseExcelDate = (val: any): string => {
+  function parseExcelDate(val: any): string {
     if (!val) return new Date().toISOString().split("T")[0];
+    if (val instanceof Date) {
+      const y = val.getFullYear();
+      const m = String(val.getMonth() + 1).padStart(2, "0");
+      const d = String(val.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
     if (typeof val === "number") {
       try {
         const d = XLSX.SSF.parse_date_code(val);
@@ -1117,31 +1301,72 @@ export default function SmsEntryPanel() {
         return new Date().toISOString().split("T")[0];
       }
     }
-    const s = String(val).trim();
+    let s = String(val).trim();
+    if (s.includes("T")) {
+      s = s.split("T")[0];
+    } else {
+      s = s.split(/\s+/)[0];
+    }
     const matchDmy = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
     if (matchDmy) {
       let yr = matchDmy[3];
       if (yr.length === 2) yr = "20" + yr;
+      if (yr.length === 3) {
+        if (yr.startsWith("20")) yr = yr.replace(/^20/, "202");
+        else yr = "20" + yr;
+      }
       return `${yr}-${matchDmy[2].padStart(2, "0")}-${matchDmy[1].padStart(2, "0")}`;
     }
     const matchYmd = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
     if (matchYmd) {
       return `${matchYmd[1]}-${matchYmd[2].padStart(2, "0")}-${matchYmd[3].padStart(2, "0")}`;
     }
+    const monthsShort = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    const monthsFull = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+    const matchWritten = s.match(/^(\d{1,2})[\/\-.]([a-zA-Z]+)[\/\-.](\d{2,4})$/);
+    if (matchWritten) {
+      const day = matchWritten[1].padStart(2, "0");
+      const monthStr = matchWritten[2].toLowerCase();
+      let yr = matchWritten[3];
+      if (yr.length === 2) yr = "20" + yr;
+      let mIdx = monthsShort.indexOf(monthStr.substring(0, 3));
+      if (mIdx === -1) mIdx = monthsFull.indexOf(monthStr);
+      if (mIdx !== -1) {
+        const month = String(mIdx + 1).padStart(2, "0");
+        return `${yr}-${month}-${day}`;
+      }
+    }
+    const parsed = Date.parse(s);
+    if (!isNaN(parsed)) {
+      const d = new Date(parsed);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
     return s;
-  };
+  }
+
+  function datesMatch(d1: string, d2: string): boolean {
+    if (!d1 || !d2) return false;
+    return d1.split(/[ T]/)[0] === d2.split(/[ T]/)[0];
+  }
 
   const mapItemToSize = (itemName: string, stdId: string): string | null => {
     const itemLower = itemName.toLowerCase();
     
     if (stdId === "is13487") {
-      if (itemLower.includes("4 lph") || itemLower.includes("4lph")) return "4 LPH";
-      if (itemLower.includes("8 lph") || itemLower.includes("8lph")) return "8 LPH";
-      if (itemLower.includes("14 lph") || itemLower.includes("14lph")) return "14 LPH";
+      if (!itemLower.includes("dripper") && !itemLower.includes("emitter")) return null;
+      const cleanItem = itemLower.replace(/\s+/g, "");
+      // IMPORTANT: Check 14lph BEFORE 4lph because "14lph" contains "4lph" as a substring
+      if (cleanItem.includes("14lph")) return "14 LPH";
+      if (cleanItem.includes("8lph")) return "8 LPH";
+      if (cleanItem.includes("4lph")) return "4 LPH";
       return null;
     }
 
     if (stdId === "is13488") {
+      if (!itemLower.includes("emitting")) return null;
       const isCl1 = itemLower.includes("class i") || itemLower.includes("class-i") || itemLower.includes("cl-i") || itemLower.includes("cl-1");
       const isCl2 = itemLower.includes("class ii") || itemLower.includes("class-ii") || itemLower.includes("cl-ii") || itemLower.includes("cl-2");
       const is12 = itemLower.includes("12mm") || itemLower.includes(" 12");
@@ -1156,8 +1381,19 @@ export default function SmsEntryPanel() {
     }
 
     if (stdId === "is12786") {
-      const isCl1 = itemLower.includes("class i") || itemLower.includes("class-i") || itemLower.includes("cl-i") || itemLower.includes("cl-1");
-      const isCl2 = itemLower.includes("class ii") || itemLower.includes("class-ii") || itemLower.includes("cl-ii") || itemLower.includes("cl-2") || itemLower.includes("2.5kg") || itemLower.includes("2.0kg");
+      if (!itemLower.includes("lateral")) return null;
+      let isCl1 = false;
+      let isCl2 = false;
+
+      if (itemLower.includes("2.5kg")) {
+        isCl2 = true;
+      } else if (itemLower.includes("2.0kg")) {
+        isCl1 = true;
+      } else {
+        isCl1 = /\bcl-i\b/i.test(itemLower) || /\bclass-i\b/i.test(itemLower) || /\bclass i\b/i.test(itemLower) || /\bcl-1\b/i.test(itemLower);
+        isCl2 = /\bcl-ii\b/i.test(itemLower) || /\bclass-ii\b/i.test(itemLower) || /\bclass ii\b/i.test(itemLower) || /\bcl-2\b/i.test(itemLower);
+      }
+
       const is12 = itemLower.includes("12mm") || itemLower.includes(" 12");
       const is16 = itemLower.includes("16mm") || itemLower.includes(" 16");
       const is20 = itemLower.includes("20mm") || itemLower.includes(" 20");
@@ -1177,6 +1413,7 @@ export default function SmsEntryPanel() {
     }
 
     if (stdId === "is4985") {
+      if (!itemLower.includes("pvc")) return null;
       const isCl2 = itemLower.includes("4kg") || itemLower.includes("class 2") || itemLower.includes("cl-2");
       const isCl3 = itemLower.includes("6kg") || itemLower.includes("class 3") || itemLower.includes("cl-3");
       
@@ -1191,6 +1428,7 @@ export default function SmsEntryPanel() {
     }
 
     if (stdId === "is17425") {
+      if (!itemLower.includes("hdpe") && !itemLower.includes("sprinkler")) return null;
       const is75 = itemLower.includes("75mm");
       const is90 = itemLower.includes("90mm");
       const isCl2 = itemLower.includes("class ii") || itemLower.includes("cl-2") || itemLower.includes("class 2");
@@ -1204,6 +1442,7 @@ export default function SmsEntryPanel() {
     }
 
     if (stdId === "is14483") {
+      if (!itemLower.includes("venturi") && !itemLower.includes("injector")) return null;
       if (itemLower.includes("1\"") || itemLower.includes("25mm")) return "V-1\" (25mm)";
       if (itemLower.includes("2\"") || itemLower.includes("50mm")) return "V-2\" (50mm)";
       return null;
@@ -1232,8 +1471,8 @@ export default function SmsEntryPanel() {
         let importedEntries: ProductionEntry[] = [];
         let errorMessages: string[] = [];
 
-        if (id === "is13488") {
-          // Customized parser for IS 13488 Emitting Pipe
+        if (id === "is13488" || id === "is12786") {
+          // Customized parser for IS 13488 Emitting Pipe and IS 12786 Plain Laterals
           const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
           
           // Find Header Row
@@ -1267,10 +1506,17 @@ export default function SmsEntryPanel() {
           }
 
           const grouped: Record<string, ProductionEntry> = {};
+          const mtrPerCoilGroups: Record<string, number[]> = {};
 
           for (let r = headerRowIdx + 1; r < data.length; r++) {
             const row = data[r];
             if (!row || row.length === 0 || row[dateColIdx] === undefined || row[dateColIdx] === null || String(row[dateColIdx]).trim() === "") continue;
+
+            // Skip total and summary footer rows
+            const dateStr = String(row[dateColIdx]).trim();
+            if (dateStr.toLowerCase().startsWith("total") || dateStr.toLowerCase().includes("daily")) {
+              continue;
+            }
 
             const dateVal = parseExcelDate(row[dateColIdx]);
             const rawSize = String(row[sizeColIdx] || "").trim();
@@ -1296,26 +1542,368 @@ export default function SmsEntryPanel() {
                 date: dateVal,
                 size: normalizedSize,
                 coils: 0,
-                mtrPerCoil: mtrPerCoilVal || 500,
+                mtrPerCoil: 0,
                 mtr: 0,
                 kg: 0,
                 value: 0
               };
+              mtrPerCoilGroups[key] = [];
             }
 
             grouped[key].coils = (grouped[key].coils || 0) + coilsVal;
             grouped[key].mtr = (grouped[key].mtr || 0) + mtrVal;
             grouped[key].kg = Number(((grouped[key].kg || 0) + kgVal).toFixed(2));
             grouped[key].value = (grouped[key].value || 0) + Math.round(valVal);
+            if (mtrPerCoilVal > 0) {
+              mtrPerCoilGroups[key].push(mtrPerCoilVal);
+            }
           }
 
-          // Recalculate average mtrPerCoil if coils > 0
+          // Process the grouped entries to finalize coil lengths and counts
           Object.keys(grouped).forEach(k => {
             const entry = grouped[k];
-            if (entry.coils && entry.coils > 0) {
-              entry.mtrPerCoil = Math.round((entry.mtr || 0) / entry.coils);
+            if (id === "is12786") {
+              const mtrPerCoilVals = mtrPerCoilGroups[k] || [];
+              let targetMtrPerCoil = 500; // default fallback
+              if (mtrPerCoilVals.length > 0) {
+                const uniqueVals = Array.from(new Set(mtrPerCoilVals));
+                if (uniqueVals.length === 1) {
+                  targetMtrPerCoil = uniqueVals[0];
+                } else {
+                  // Mixed coil lengths (e.g. 200 and 500). Pick the larger target length.
+                  targetMtrPerCoil = Math.max(...uniqueVals);
+                }
+              }
+              entry.mtrPerCoil = targetMtrPerCoil;
+              entry.coils = Math.round((entry.mtr || 0) / targetMtrPerCoil);
+            } else {
+              // Existing average calculation for is13488
+              if (entry.coils && entry.coils > 0) {
+                entry.mtrPerCoil = Math.round((entry.mtr || 0) / entry.coils);
+              }
             }
           });
+
+          importedEntries = Object.values(grouped);
+        } else if (id === "is13487") {
+          // Customized parser for IS 13487 Emitters
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+          
+          // Find Header Row
+          let headerRowIdx = -1;
+          for (let r = 0; r < Math.min(data.length, 15); r++) {
+            const row = data[r];
+            if (row && row.some(cell => String(cell).trim().toUpperCase() === "DATE") &&
+                       row.some(cell => String(cell).trim().toUpperCase().includes("SIZE"))) {
+              headerRowIdx = r;
+              break;
+            }
+          }
+
+          if (headerRowIdx === -1) {
+            setImportStatus({ type: "error", message: "Failed to find headers containing 'DATE' and 'SIZE' in the first 15 rows of the Excel sheet." });
+            return;
+          }
+
+          const headers = data[headerRowIdx].map(h => String(h || "").trim().toUpperCase());
+          const dateColIdx = headers.findIndex(h => h.includes("DATE"));
+          const sizeColIdx = headers.findIndex(h => h.includes("SIZE"));
+          const nosColIdx = headers.findIndex(h => h.includes("PRODUCTION") || h.includes("NOS") || h.includes("QTY"));
+          const unitColIdx = headers.findIndex(h => h.includes("UNIT") || h.includes("THOUSAND"));
+          const valColIdx = headers.findIndex(h => h.includes("VALUE") || h.includes("RS") || h.includes("PRICE"));
+
+          if (dateColIdx === -1 || sizeColIdx === -1) {
+            setImportStatus({ type: "error", message: "Missing required columns 'DATE' or 'SIZE' in header row." });
+            return;
+          }
+
+          const grouped: Record<string, ProductionEntry> = {};
+
+          for (let r = headerRowIdx + 1; r < data.length; r++) {
+            const row = data[r];
+            if (!row || row.length === 0 || row[dateColIdx] === undefined || row[dateColIdx] === null || String(row[dateColIdx]).trim() === "") continue;
+
+            const dateVal = parseExcelDate(row[dateColIdx]);
+            const rawSize = String(row[sizeColIdx] || "").trim();
+            if (!rawSize) continue;
+
+            // Match size case-insensitively
+            const normalizedSize = sizes.find(s => s.toLowerCase() === rawSize.toLowerCase());
+            if (!normalizedSize) {
+              errorMessages.push(`Row ${r + 1}: Size "${rawSize}" is not configured for standard ${id}.`);
+              continue;
+            }
+
+            const nosVal = nosColIdx !== -1 ? (Number(row[nosColIdx]) || 0) : 0;
+            const thousandVal = unitColIdx !== -1 && row[unitColIdx] !== undefined ? (Number(row[unitColIdx]) || 0) : (nosVal / 1000);
+            const valVal = valColIdx !== -1 ? (Number(row[valColIdx]) || 0) : 0;
+
+            const key = `${dateVal}_${normalizedSize}`;
+            if (!grouped[key]) {
+              grouped[key] = {
+                id: `${Date.now()}_prod_${Math.random().toString(36).substr(2, 9)}_${r}`,
+                date: dateVal,
+                size: normalizedSize,
+                nos: 0,
+                thousandUnit: 0,
+                value: 0
+              };
+            }
+
+            grouped[key].nos = (grouped[key].nos || 0) + nosVal;
+            grouped[key].thousandUnit = Number(((grouped[key].thousandUnit || 0) + thousandVal).toFixed(3));
+            grouped[key].value = (grouped[key].value || 0) + Math.round(valVal);
+          }
+
+          importedEntries = Object.values(grouped);
+        } else if (id === "is4985") {
+          // Customized parser for IS 4985 uPVC Pipe
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+          
+          // Find Header Row
+          let headerRowIdx = -1;
+          for (let r = 0; r < Math.min(data.length, 15); r++) {
+            const row = data[r];
+            if (row && row.some(cell => String(cell).trim().toUpperCase() === "DATE") &&
+                       row.some(cell => String(cell).trim().toUpperCase().includes("SIZE"))) {
+              headerRowIdx = r;
+              break;
+            }
+          }
+
+          if (headerRowIdx === -1) {
+            setImportStatus({ type: "error", message: "Failed to find headers containing 'DATE' and 'SIZE & CLASS' in the first 15 rows of the Excel sheet." });
+            return;
+          }
+
+          const headers = data[headerRowIdx].map(h => String(h || "").trim().toUpperCase());
+          const dateColIdx = headers.findIndex(h => h.includes("DATE"));
+          const sizeColIdx = headers.findIndex(h => h.includes("SIZE"));
+          const pipeColIdx = headers.findIndex(h => h.includes("PIPE") || h.includes("QTY"));
+          const tonnColIdx = headers.findIndex(h => h.includes("TON") || h.includes("TONN") || h.includes("WEIGHT"));
+          const valColIdx = headers.findIndex(h => h.includes("VALUE") || h.includes("RS"));
+
+          if (dateColIdx === -1 || sizeColIdx === -1) {
+            setImportStatus({ type: "error", message: "Missing required columns 'DATE' or 'SIZE & CLASS' in header row." });
+            return;
+          }
+
+          const grouped: Record<string, ProductionEntry> = {};
+
+          for (let r = headerRowIdx + 1; r < data.length; r++) {
+            const row = data[r];
+            if (!row || row.length === 0 || row[dateColIdx] === undefined || row[dateColIdx] === null || String(row[dateColIdx]).trim() === "") continue;
+
+            // Skip total and summary footer rows
+            const dateStr = String(row[dateColIdx]).trim();
+            if (dateStr.toLowerCase().startsWith("total") || dateStr.toLowerCase().includes("daily")) {
+              continue;
+            }
+
+            const dateVal = parseExcelDate(row[dateColIdx]);
+            const rawSize = String(row[sizeColIdx] || "").trim();
+            if (!rawSize) continue;
+
+            const normalizedSize = sizes.find(s => s.toLowerCase() === rawSize.toLowerCase());
+            if (!normalizedSize) {
+              errorMessages.push(`Row ${r + 1}: Size "${rawSize}" is not configured for standard ${id}.`);
+              continue;
+            }
+
+            const pipeVal = pipeColIdx !== -1 ? (Number(row[pipeColIdx]) || 0) : 0;
+            const tonnVal = tonnColIdx !== -1 ? (Number(row[tonnColIdx]) || 0) : 0;
+            // kg is calculated as tonnVal * 1000, or from weight conversion rates if tonn is 0
+            let kgVal = tonnVal * 1000;
+            if (kgVal === 0 && pipeVal > 0) {
+              const weightKey = `sms_conv_weight_${id}_${normalizedSize}`;
+              const weightPerPipe = Number(localStorage.getItem(weightKey)) || 0;
+              kgVal = pipeVal * weightPerPipe;
+            }
+            const valVal = valColIdx !== -1 ? (Number(row[valColIdx]) || 0) : 0;
+
+            const key = `${dateVal}_${normalizedSize}`;
+            if (!grouped[key]) {
+              grouped[key] = {
+                id: `${Date.now()}_prod_${Math.random().toString(36).substr(2, 9)}_${r}`,
+                date: dateVal,
+                size: normalizedSize,
+                pipe: 0,
+                tonn: 0,
+                kg: 0,
+                value: 0
+              };
+            }
+
+            grouped[key].pipe = (grouped[key].pipe || 0) + pipeVal;
+            grouped[key].tonn = Number(((grouped[key].tonn || 0) + tonnVal).toFixed(3));
+            grouped[key].kg = Number(((grouped[key].kg || 0) + kgVal).toFixed(2));
+            grouped[key].value = (grouped[key].value || 0) + Math.round(valVal);
+          }
+
+          importedEntries = Object.values(grouped);
+        } else if (id === "is17425") {
+          // Customized parser for IS 17425 HDPE Sprinkler Pipe
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+          
+          // Find Header Row
+          let headerRowIdx = -1;
+          for (let r = 0; r < Math.min(data.length, 15); r++) {
+            const row = data[r];
+            if (row && row.some(cell => String(cell).trim().toUpperCase() === "DATE") &&
+                       row.some(cell => String(cell).trim().toUpperCase().includes("SIZE"))) {
+              headerRowIdx = r;
+              break;
+            }
+          }
+
+          if (headerRowIdx === -1) {
+            setImportStatus({ type: "error", message: "Failed to find headers containing 'DATE' and 'SIZE' in the first 15 rows of the Excel sheet." });
+            return;
+          }
+
+          const headers = data[headerRowIdx].map(h => String(h || "").trim().toUpperCase());
+          const dateColIdx = headers.findIndex(h => h.includes("DATE"));
+          const sizeColIdx = headers.findIndex(h => h.includes("SIZE"));
+          const nosColIdx = headers.findIndex(h => h.includes("PRODUCTION") || h.includes("NOS") || h.includes("QTY"));
+          const valColIdx = headers.findIndex(h => h.includes("VALUE") || h.includes("RS"));
+
+          if (dateColIdx === -1 || sizeColIdx === -1) {
+            setImportStatus({ type: "error", message: "Missing required columns 'DATE' or 'SIZE' in header row." });
+            return;
+          }
+
+          const grouped: Record<string, ProductionEntry> = {};
+
+          for (let r = headerRowIdx + 1; r < data.length; r++) {
+            const row = data[r];
+            if (!row || row.length === 0 || row[dateColIdx] === undefined || row[dateColIdx] === null || String(row[dateColIdx]).trim() === "") continue;
+
+            // Skip total and summary footer rows
+            const dateStr = String(row[dateColIdx]).trim();
+            if (dateStr.toLowerCase().startsWith("total") || dateStr.toLowerCase().includes("daily") || dateStr.toLowerCase().includes("monthly")) {
+              continue;
+            }
+
+            const dateVal = parseExcelDate(row[dateColIdx]);
+            const rawSize = String(row[sizeColIdx] || "").trim();
+            if (!rawSize) continue;
+
+            const normalizedSize = sizes.find(s => s.toLowerCase() === rawSize.toLowerCase());
+            if (!normalizedSize) {
+              errorMessages.push(`Row ${r + 1}: Size "${rawSize}" is not configured for standard ${id}.`);
+              continue;
+            }
+
+            const nosVal = nosColIdx !== -1 ? (Number(row[nosColIdx]) || 0) : 0;
+            const valVal = valColIdx !== -1 ? (Number(row[valColIdx]) || 0) : 0;
+
+            const key = `${dateVal}_${normalizedSize}`;
+            if (!grouped[key]) {
+              grouped[key] = {
+                id: `${Date.now()}_prod_${Math.random().toString(36).substr(2, 9)}_${r}`,
+                date: dateVal,
+                size: normalizedSize,
+                nos: 0,
+                pipe: 0,
+                value: 0
+              };
+            }
+
+            grouped[key].nos = (grouped[key].nos || 0) + nosVal;
+            grouped[key].pipe = (grouped[key].pipe || 0) + nosVal;
+            grouped[key].value = (grouped[key].value || 0) + Math.round(valVal);
+          }
+
+          importedEntries = Object.values(grouped);
+        } else if (id === "is14483") {
+          // Customized parser for IS 14483 Venturi Injector
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+          
+          // Find Header Row
+          let headerRowIdx = -1;
+          for (let r = 0; r < Math.min(data.length, 15); r++) {
+            const row = data[r];
+            if (row && row.some(cell => String(cell).trim().toUpperCase() === "DATE") &&
+                       row.some(cell => String(cell).trim().toUpperCase().includes("SIZE"))) {
+              headerRowIdx = r;
+              break;
+            }
+          }
+
+          if (headerRowIdx === -1) {
+            setImportStatus({ type: "error", message: "Failed to find headers containing 'DATE' and 'SIZE' in the first 15 rows of the Excel sheet." });
+            return;
+          }
+
+          const headers = data[headerRowIdx].map(h => String(h || "").trim().toUpperCase());
+          const dateColIdx = headers.findIndex(h => h.includes("DATE"));
+          const sizeColIdx = headers.findIndex(h => h.includes("SIZE"));
+          const nosColIdx = headers.findIndex(h => h.includes("PRODUCTION") || h.includes("NOS") || h.includes("QTY"));
+          const valColIdx = headers.findIndex(h => h.includes("VALUE") || h.includes("RS"));
+
+          if (dateColIdx === -1 || sizeColIdx === -1) {
+            setImportStatus({ type: "error", message: "Missing required columns 'DATE' or 'SIZE' in header row." });
+            return;
+          }
+
+          const grouped: Record<string, ProductionEntry> = {};
+
+          for (let r = headerRowIdx + 1; r < data.length; r++) {
+            const row = data[r];
+            if (!row || row.length === 0 || row[dateColIdx] === undefined || row[dateColIdx] === null || String(row[dateColIdx]).trim() === "") continue;
+
+            // Skip total and summary footer rows
+            const dateStr = String(row[dateColIdx]).trim();
+            if (dateStr.toLowerCase().startsWith("total") || dateStr.toLowerCase().includes("daily") || dateStr.toLowerCase().includes("monthly")) {
+              continue;
+            }
+
+            const dateVal = parseExcelDate(row[dateColIdx]);
+            const rawSize = String(row[sizeColIdx] || "").trim();
+            if (!rawSize) continue;
+
+            let normalizedSize = "";
+            const sizeLower = rawSize.toLowerCase();
+            if (sizeLower.includes("1\"") || sizeLower.includes("25mm")) {
+              normalizedSize = "V-1\" (25mm)";
+            } else if (sizeLower.includes("2\"") || sizeLower.includes("50mm")) {
+              normalizedSize = "V-2\" (50mm)";
+            } else {
+              const found = sizes.find(s => s.toLowerCase() === rawSize.toLowerCase());
+              if (found) {
+                normalizedSize = found;
+              }
+            }
+
+            if (!normalizedSize || !sizes.includes(normalizedSize)) {
+              errorMessages.push(`Row ${r + 1}: Size "${rawSize}" is not configured for standard ${id}.`);
+              continue;
+            }
+
+            const nosVal = nosColIdx !== -1 ? (Number(row[nosColIdx]) || 0) : 0;
+            let valVal = valColIdx !== -1 ? (Number(row[valColIdx]) || 0) : 0;
+            if (valVal === 0 && nosVal > 0) {
+              const valueKey = `sms_conv_value_${id}_${normalizedSize}`;
+              const valuePerUnit = Number(localStorage.getItem(valueKey)) || 0;
+              valVal = Math.round(nosVal * valuePerUnit);
+            }
+
+            const key = `${dateVal}_${normalizedSize}`;
+            if (!grouped[key]) {
+              grouped[key] = {
+                id: `${Date.now()}_prod_${Math.random().toString(36).substr(2, 9)}_${r}`,
+                date: dateVal,
+                size: normalizedSize,
+                nos: 0,
+                pipe: 0,
+                value: 0
+              };
+            }
+
+            grouped[key].nos = (grouped[key].nos || 0) + nosVal;
+            grouped[key].pipe = (grouped[key].pipe || 0) + nosVal;
+            grouped[key].value = (grouped[key].value || 0) + Math.round(valVal);
+          }
 
           importedEntries = Object.values(grouped);
         } else {
@@ -1369,8 +1957,7 @@ export default function SmsEntryPanel() {
           importedEntries.forEach(e => mergedMap.set(`${e.date}_${e.size}`, e));
           
           const newProdEntries = Array.from(mergedMap.values());
-          localStorage.setItem(`sms_prod_${id}`, JSON.stringify(newProdEntries));
-          setProdEntries(newProdEntries);
+          await saveFullProductionList(newProdEntries);
         }
 
         if (errorMessages.length > 0) {
@@ -1411,13 +1998,47 @@ export default function SmsEntryPanel() {
         }
 
         const rows = XLSX.utils.sheet_to_json(ws) as any[];
+        let processedRows = rows;
+        // Skip header-in-value row if present (e.g. { '20MM CL-1': 'Date', __EMPTY: 'Qty' })
+        if (rows.length > 0) {
+          const firstRowValues = Object.values(rows[0]).map(v => String(v).toLowerCase().trim());
+          if (firstRowValues.includes("date") && (firstRowValues.includes("qty") || firstRowValues.includes("quantity") || firstRowValues.includes("mtr"))) {
+            processedRows = rows.slice(1);
+          }
+        }
+
         let importedCount = 0;
         let errorMessages: string[] = [];
         let newDispEntries = [...dispEntries];
 
-        rows.forEach((row, index) => {
-          const dateVal = parseExcelDate(row["Date (DD/MM/YYYY)"] || row["Date (YYYY-MM-DD)"] || row["Date"]);
-          const sizeVal = String(row["Size"] || "").trim();
+        processedRows.forEach((row, index) => {
+          // Resolve date and quantity inputs with fallback mapping for the 20mm Cl-1 sheet
+          let dateInput = row["Date (DD/MM/YYYY)"] || row["Date (YYYY-MM-DD)"] || row["Date"];
+          let qtyInput = row["Mtr"] !== undefined ? row["Mtr"] : (row["Disp Mtr"] !== undefined ? row["Disp Mtr"] : row["Qty"]);
+
+          const cl1Key = Object.keys(row).find(k => k.toLowerCase().includes("20mm cl-1") || k.toLowerCase().includes("20mm cl1"));
+          if (cl1Key) {
+            dateInput = row[cl1Key];
+            qtyInput = row["__EMPTY"] !== undefined ? row["__EMPTY"] : row["Qty"];
+          }
+
+          if (dateInput === undefined || qtyInput === undefined) {
+            const values = Object.values(row);
+            if (values.length >= 2) {
+              dateInput = values[0];
+              qtyInput = values[1];
+            }
+          }
+
+          const dateVal = parseExcelDate(dateInput);
+          let sizeVal = String(row["Size"] || "").trim();
+
+          // Fallback: If importing on the 20mm Cl-1 tab, any 20mm item or empty size defaults to 20mm Cl-1
+          if (id === "is12786" && selectedSize === "20mm Cl-1") {
+            if (!sizeVal || sizeVal.toLowerCase().includes("20mm")) {
+              sizeVal = "20mm Cl-1";
+            }
+          }
 
           if (!sizeVal) {
             errorMessages.push(`Row ${index + 2}: Size is empty.`);
@@ -1444,7 +2065,7 @@ export default function SmsEntryPanel() {
           if (id === "is13488" || id === "is12786") {
             const pRoll = matchingProd ? (matchingProd.coils || 0) : 0;
             const pM = matchingProd ? (matchingProd.mtr || 0) : 0;
-            const dM = row["Mtr"] !== undefined ? Number(row["Mtr"]) : (row["Disp Mtr"] !== undefined ? Number(row["Disp Mtr"]) : 0);
+            const dM = qtyInput !== undefined ? Number(qtyInput) : 0;
             entry.prodRoll = pRoll;
             entry.prodMtr = pM;
             entry.dispMtr = dM;
@@ -1470,8 +2091,7 @@ export default function SmsEntryPanel() {
         });
 
         if (importedCount > 0) {
-          localStorage.setItem(`sms_disp_${id}`, JSON.stringify(newDispEntries));
-          setDispEntries(newDispEntries);
+          await saveFullDispatchList(newDispEntries);
         }
 
         if (errorMessages.length > 0) {
@@ -1492,6 +2112,156 @@ export default function SmsEntryPanel() {
     };
     reader.readAsBinaryString(file);
     e.target.value = "";
+  };
+
+  // Reconcile and Combine IS 12786 20mm Cl-1 and Cl-2 Dispatches
+  const handleReconcileCl1 = async () => {
+    // Get all Class-1 entries
+    const c1Entries = dispEntries.filter(e => e.size === "20mm Cl-1");
+    // Find unreconciled ones (billNo is "-" or empty)
+    const unreconciledC1 = c1Entries.filter(e => e.billNo === "-" || !e.billNo);
+    if (unreconciledC1.length === 0) {
+      alert("No unreconciled 20mm Cl-1 entries found (all entries have invoice/bill details). Please import new Class-1 dispatches first.");
+      return;
+    }
+
+    const c1Dates = Array.from(new Set(unreconciledC1.map(e => e.date)));
+    let totalMovedBills = 0;
+    let totalSplitBills = 0;
+    let reconciledDatesCount = 0;
+
+    let reconciledC1: DispatchEntry[] = [];
+    let reconciledC2 = dispEntries.filter(e => e.size === "20mm Cl-2");
+    const otherSizes = dispEntries.filter(e => e.size !== "20mm Cl-1" && e.size !== "20mm Cl-2");
+
+    c1Dates.forEach(dateStr => {
+      const dayC1 = unreconciledC1.filter(e => e.date === dateStr);
+      const targetQty = dayC1.reduce((sum, e) => sum + (e.dispMtr || 0), 0);
+      if (targetQty <= 0) return;
+
+      const dayC2 = reconciledC2.filter(e => e.date === dateStr);
+      if (dayC2.length === 0) {
+        // No Class-2 dispatches on this day, keep Class-1 placeholders as is
+        reconciledC1.push(...dayC1);
+        return;
+      }
+
+      // Subset Sum algorithm to find best combination of Class-2 dispatches
+      let bestSubset: typeof dayC2 = [];
+      let bestSum = 0;
+      const n = dayC2.length;
+      
+      const maxN = Math.min(n, 14); // Limit subset size to prevent page freezes
+      const numSubsets = 1 << maxN;
+      
+      for (let i = 0; i < numSubsets; i++) {
+        const currentSubset: typeof dayC2 = [];
+        let currentSum = 0;
+        for (let j = 0; j < maxN; j++) {
+          if ((i & (1 << j)) !== 0) {
+            currentSubset.push(dayC2[j]);
+            currentSum += (dayC2[j].dispMtr || 0);
+          }
+        }
+        if (currentSum <= targetQty && currentSum > bestSum) {
+          bestSum = currentSum;
+          bestSubset = currentSubset;
+        }
+      }
+
+      const deletedC2Ids = new Set(bestSubset.map(d => d.id));
+
+      // Move the best subset completely to Class-1
+      bestSubset.forEach(d => {
+        reconciledC1.push({
+          ...d,
+          id: `${d.id}_moved_${Date.now()}`,
+          size: "20mm Cl-1",
+        });
+        totalMovedBills++;
+      });
+
+      // Remove moved bills from reconciledC2
+      reconciledC2 = reconciledC2.filter(e => !deletedC2Ids.has(e.id));
+
+      // Handle the remaining difference by splitting one of the remaining Class-2 bills on this date
+      let diff = targetQty - bestSum;
+      const remainingDayC2 = reconciledC2.filter(e => e.date === dateStr);
+
+      if (diff > 0 && remainingDayC2.length > 0) {
+        remainingDayC2.sort((a, b) => (b.dispMtr || 0) - (a.dispMtr || 0));
+        const billToSplit = remainingDayC2[0];
+
+        if ((billToSplit.dispMtr || 0) > diff) {
+          // Split the bill
+          reconciledC1.push({
+            ...billToSplit,
+            id: `${billToSplit.id}_split_c1_${Date.now()}`,
+            size: "20mm Cl-1",
+            dispMtr: diff,
+          });
+
+          // Update the bill in reunitedC2 list
+          reconciledC2 = reconciledC2.map(e => {
+            if (e.id === billToSplit.id) {
+              return {
+                ...e,
+                dispMtr: (e.dispMtr || 0) - diff,
+              };
+            }
+            return e;
+          });
+          totalSplitBills++;
+        } else {
+          // Move the entire bill if it's smaller or equal to the difference
+          reconciledC1.push({
+            ...billToSplit,
+            id: `${billToSplit.id}_moved_extra_${Date.now()}`,
+            size: "20mm Cl-1",
+          });
+          reconciledC2 = reconciledC2.filter(e => e.id !== billToSplit.id);
+          totalMovedBills++;
+        }
+      }
+
+      reconciledDatesCount++;
+    });
+
+    // Add back any Class-1 entries that were already reconciled (billNo !== "-") or not processed
+    const processedDates = new Set(c1Dates);
+    c1Entries.forEach(e => {
+      if (e.billNo !== "-" && !!e.billNo) {
+        reconciledC1.push(e);
+      } else if (!processedDates.has(e.date)) {
+        reconciledC1.push(e);
+      }
+    });
+
+    // Combine all entries and dynamically update their production & closing stocks
+    const combinedEntries = [...otherSizes, ...reconciledC1, ...reconciledC2];
+    
+    const finalEntries = combinedEntries.map(entry => {
+      if (entry.size === "20mm Cl-1" || entry.size === "20mm Cl-2") {
+        const matchingProd = prodEntries.find(p => p.date === entry.date && p.size === entry.size);
+        const pRoll = matchingProd ? (matchingProd.coils || 0) : 0;
+        const pM = matchingProd ? (matchingProd.mtr || 0) : 0;
+        const dM = entry.dispMtr || 0;
+        
+        return {
+          ...entry,
+          prodRoll: pRoll,
+          prodMtr: pM,
+          dispMtr: dM,
+          closeMtr: pM - dM
+        };
+      }
+      return entry;
+    });
+
+    // Save to localStorage
+    await saveFullDispatchList(finalEntries);
+
+    alert(`Reconciliation complete!\n- Reconciled dates: ${reconciledDatesCount}\n- Completely moved bills: ${totalMovedBills}\n- Split bills: ${totalSplitBills}`);
   };
 
   // Parse and Import Consignee Sales Excel File
@@ -1575,8 +2345,7 @@ export default function SmsEntryPanel() {
         });
 
         if (importedCount > 0) {
-          localStorage.setItem(`sms_disp_${id}`, JSON.stringify(newDispEntries));
-          setDispEntries(newDispEntries);
+          await saveFullDispatchList(newDispEntries);
           setImportedConsigneeIds(prev => {
             const merged = new Set([...prev, ...newImportedIds]);
             localStorage.setItem(`sms_consignee_imported_ids_${id}`, JSON.stringify([...merged]));
@@ -1598,7 +2367,7 @@ export default function SmsEntryPanel() {
   };
 
   // Clear all consignee-imported dispatch entries
-  const handleClearImportedData = () => {
+  const handleClearImportedData = async () => {
     if (importedConsigneeIds.size === 0) {
       alert("No imported consignee data to clear.");
       return;
@@ -1609,16 +2378,15 @@ export default function SmsEntryPanel() {
     if (!confirmed) return;
 
     const filtered = dispEntries.filter(e => !importedConsigneeIds.has(e.id));
-    localStorage.setItem(`sms_disp_${id}`, JSON.stringify(filtered));
+    await saveFullDispatchList(filtered);
     localStorage.removeItem(`sms_consignee_imported_ids_${id}`);
-    setDispEntries(filtered);
     setImportedConsigneeIds(new Set());
     setConsigneeReportRows([]);
     setImportStatus({ type: "success", message: "Imported consignee data cleared successfully." });
   };
 
-  // Helper to get registered and logged consignees
-  const getAllConsignees = () => {
+  // Memoized registered consignee names list loaded from localStorage
+  const registeredConsignees = useMemo(() => {
     let registered: string[] = [];
     const stored = localStorage.getItem("sms_consignees");
     if (stored) {
@@ -1629,29 +2397,66 @@ export default function SmsEntryPanel() {
           return c.name || "";
         }).filter(Boolean);
       } catch (e) {}
-    } else {
-      registered = [
-        "Jain Irrigation Systems Ltd",
-        "Netafim Irrigation India Pvt Ltd",
-        "GGRC (Gujarat Green Revolution)",
-        "Premier Irrigation Adritec",
-        "Mahindra EPC Irrigation"
-      ];
     }
 
+    const defaultsToRemove = new Set([
+      "Jain Irrigation Systems Ltd",
+      "Netafim Irrigation India Pvt Ltd",
+      "GGRC (Gujarat Green Revolution)",
+      "Premier Irrigation Adritec",
+      "Mahindra EPC Irrigation"
+    ]);
+    let cleaned = registered.filter(name => !defaultsToRemove.has(name));
+
+    const seeded = localStorage.getItem("sms_consignees_seeded_v1");
+    if (!seeded) {
+      const currentObjects = stored ? JSON.parse(stored) : [];
+      const cleanedObjects = currentObjects.filter((c: any) => {
+        const name = typeof c === "string" ? c : c.name || "";
+        return !defaultsToRemove.has(name);
+      });
+      const objectNames = new Set(cleanedObjects.map((c: any) => (typeof c === "string" ? c : c.name || "").toLowerCase()));
+      
+      const mergedObjects = [...cleanedObjects];
+      defaultConsignees.forEach(d => {
+        if (!objectNames.has(d.name.toLowerCase())) {
+          mergedObjects.push(d);
+        }
+      });
+
+      localStorage.setItem("sms_consignees", JSON.stringify(mergedObjects));
+      localStorage.setItem("sms_consignees_seeded_v1", "true");
+      cleaned = mergedObjects.map(c => c.name);
+    }
+    return cleaned;
+  }, [consigneeEditModal]);
+
+  // Fast O(1) lookup Map from clean name to original registered name
+  const cleanToRegisteredMap = useMemo(() => {
+    const map = new Map<string, string>();
+    registeredConsignees.forEach(name => {
+      map.set(getCleanConsigneeName(name).toLowerCase(), name);
+    });
+    return map;
+  }, [registeredConsignees]);
+
+  // Master list of all registered and logged consignees (O(N) linear time)
+  const allConsignees = useMemo(() => {
     const loggedParties = new Set<string>();
     dispEntries.forEach(entry => {
       const p = String(entry.partyName || "").trim();
       if (p && p !== "-" && p !== "FARMER") {
-        loggedParties.add(p);
+        const cleanP = getCleanConsigneeName(p).toLowerCase();
+        const matched = cleanToRegisteredMap.get(cleanP);
+        loggedParties.add(matched || p);
       }
     });
 
-    const merged = Array.from(new Set([...registered, ...Array.from(loggedParties)]));
+    const merged = Array.from(new Set([...registeredConsignees, ...Array.from(loggedParties)]));
     return merged.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-  };
+  }, [registeredConsignees, dispEntries, cleanToRegisteredMap]);
 
-  // Consignees that have at least one dispatch in the selected month+year (defined AFTER getAllConsignees)
+  // Consignees that have at least one dispatch in the selected month+year
   const activeConsignees = useMemo(() => {
     const targetMonthIdx = MONTHS.indexOf(consigneeReportMonth) + 1;
     const targetMonthStr = targetMonthIdx < 10 ? `0${targetMonthIdx}` : `${targetMonthIdx}`;
@@ -1662,18 +2467,36 @@ export default function SmsEntryPanel() {
       if (entry.date && entry.date.startsWith(targetPrefix)) {
         const p = String(entry.partyName || "").trim();
         if (p && p !== "-" && p !== "FARMER") {
-          partiesInPeriod.add(p);
+          const cleanP = getCleanConsigneeName(p).toLowerCase();
+          const matched = cleanToRegisteredMap.get(cleanP);
+          partiesInPeriod.add(matched || p);
         }
       }
     });
 
-    // Filter master consignee list to only those with dispatches this period
-    return getAllConsignees().filter(name =>
+    // Filter master list to only those with dispatches this period
+    const list = allConsignees.filter(name =>
       partiesInPeriod.has(name) ||
-      [...partiesInPeriod].some(p => p.toLowerCase() === name.toLowerCase())
+      partiesInPeriod.has(cleanToRegisteredMap.get(getCleanConsigneeName(name).toLowerCase()) || "")
     );
+
+    // Sort: Saved/registered consignees first, then alphabetical
+    const sorted = [...list].sort((a, b) => {
+      const aClean = getCleanConsigneeName(a).toLowerCase();
+      const bClean = getCleanConsigneeName(b).toLowerCase();
+      const aSaved = cleanToRegisteredMap.has(aClean);
+      const bSaved = cleanToRegisteredMap.has(bClean);
+      if (aSaved && !bSaved) return -1;
+      if (!aSaved && bSaved) return 1;
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    });
+
+    if (showSavedOnly) {
+      return sorted.filter(name => cleanToRegisteredMap.has(getCleanConsigneeName(name).toLowerCase()));
+    }
+    return sorted;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispEntries, consigneeReportMonth, consigneeReportYear]);
+  }, [allConsignees, dispEntries, consigneeReportMonth, consigneeReportYear, showSavedOnly, cleanToRegisteredMap]);
 
   // Warning checks for selected consignees
   const getConsigneeWarnings = () => {
@@ -1687,7 +2510,7 @@ export default function SmsEntryPanel() {
 
     const warnings: { name: string; missing: string[]; obj: any }[] = [];
     selectedConsignees.forEach(name => {
-      const obj = registeredObjects.find(r => r && r.name && r.name.toLowerCase() === name.toLowerCase());
+      const obj = registeredObjects.find(r => r && r.name && getCleanConsigneeName(r.name).toLowerCase() === getCleanConsigneeName(name).toLowerCase());
       if (!obj || typeof obj === "string") {
         warnings.push({ 
           name, 
@@ -1758,7 +2581,7 @@ export default function SmsEntryPanel() {
       if (entry.date && entry.date.startsWith(targetPrefix)) {
         const entryParty = String(entry.partyName || "").trim();
         const matchedConsignee = selectedConsignees.find(
-          c => c.toLowerCase() === entryParty.toLowerCase()
+          c => getCleanConsigneeName(c).toLowerCase() === getCleanConsigneeName(entryParty).toLowerCase()
         );
         
         if (matchedConsignee) {
@@ -1824,11 +2647,11 @@ export default function SmsEntryPanel() {
     const aoa: any[][] = [headers];
 
     consigneeReportRows.forEach(row => {
-      const obj = registeredObjects.find(r => r && r.name && r.name.toLowerCase() === row.consigneeName.toLowerCase()) || {};
+      const obj = registeredObjects.find(r => r && r.name && getCleanConsigneeName(r.name).toLowerCase() === getCleanConsigneeName(row.consigneeName).toLowerCase()) || {};
 
       aoa.push([
         "PARAGON",
-        row.consigneeName,
+        obj.name || row.consigneeName,
         obj.address || "-",
         obj.country || "India",
         obj.state || "-",
@@ -1912,19 +2735,27 @@ export default function SmsEntryPanel() {
     const wb = XLSX.utils.book_new();
     const sheetTitle = `Consignee Data - ${id.replace("is", "")}`;
     XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
-    XLSX.writeFile(wb, "PARAGON CONSIGNEE.xlsx");
+    
+    const cleanFilename = (exportFilename.trim() || "PARAGON CONSIGNEE").replace(/\.xlsx$/i, "");
+    XLSX.writeFile(wb, `${cleanFilename}.xlsx`);
   };
 
   // Helper to calculate the running stock for all dates of a size
-  const getFullStockLedgerForSize = (sizeName: string) => {
+  const getFullStockLedgerForSize = (
+    sizeName: string,
+    customFromMonth?: string,
+    customFromYear?: string,
+    customToMonth?: string,
+    customToYear?: string
+  ) => {
     const sizeProd = prodEntries.filter(e => e.size === sizeName);
     const sizeDisp = dispEntries.filter(e => e.size === sizeName);
     
     // Load size-specific date filters if available, else fallback to global page states
-    const szFromMonth = localStorage.getItem(`sms_stock_from_month_${id}_${sizeName}`) || fromMonth || "January";
-    const szFromYear = localStorage.getItem(`sms_stock_from_year_${id}_${sizeName}`) || fromYear || "2026";
-    const szToMonth = localStorage.getItem(`sms_stock_to_month_${id}_${sizeName}`) || toMonth || "December";
-    const szToYear = localStorage.getItem(`sms_stock_to_year_${id}_${sizeName}`) || toYear || "2026";
+    const szFromMonth = customFromMonth || localStorage.getItem(`sms_stock_from_month_${id}_${sizeName}`) || fromMonth || "January";
+    const szFromYear = customFromYear || localStorage.getItem(`sms_stock_from_year_${id}_${sizeName}`) || fromYear || "2026";
+    const szToMonth = customToMonth || localStorage.getItem(`sms_stock_to_month_${id}_${sizeName}`) || toMonth || "December";
+    const szToYear = customToYear || localStorage.getItem(`sms_stock_to_year_${id}_${sizeName}`) || toYear || "2026";
 
     // Find oldest date in logs or saved starting stocks to start our timeline
     let startYear = Number(szFromYear);
@@ -2020,8 +2851,8 @@ export default function SmsEntryPanel() {
         const dt = `${yr}-${mo}-${dStr}`;
         if (dt > todayStrL) break;
 
-        const dProds = sizeProd.filter(e => e.date === dt);
-        const dDisps = sizeDisp.filter(e => e.date === dt);
+        const dProds = sizeProd.filter(e => datesMatch(e.date, dt));
+        const dDisps = sizeDisp.filter(e => datesMatch(e.date, dt));
 
         if (dDisps.length > 0) {
           dDisps.forEach((d, idx) => {
@@ -2063,6 +2894,8 @@ export default function SmsEntryPanel() {
             const openStock = runningStock;
             runningStock = runningStock + prodQty - dispQty;
 
+            const thousandVal = (id === "is13487" && isFirstDisp && dProds.length > 0) ? (dProds[0].thousandUnit || (prodNosVal / 1000)) : 0;
+
             ledgerRows.push({
               "Size": sizeName,
               "Date": dt,
@@ -2074,13 +2907,30 @@ export default function SmsEntryPanel() {
               "Production (Mtr)": prodMtrVal,
               "Dispatch (Coils)": (id === "is13488" || id === "is12786") ? d.coils || 0 : 0,
               "Dispatch (Mtr)": dispQty,
-              "Closing Stock": runningStock
+              "Closing Stock": runningStock,
+              
+              // Standard-independent properties
+              prodRoll: prodRollVal,
+              prodMtr: prodMtrVal,
+              prodNos: prodNosVal,
+              prodPipe: prodPipeVal,
+              prodMtrPipe: prodMtrPipeVal,
+              dispMtr: (id === "is13488" || id === "is12786") ? dispQty : 0,
+              dispNos: (id === "is13487" || id === "is14483" || id === "is17425") ? dispQty : 0,
+              dispPipe: id === "is4985" ? dispQty : 0,
+              dispMtrPipe: id === "is4985" ? d.dispMtrPipe || 0 : 0,
+              closingStock: runningStock,
+              thousandUnit: thousandVal
             });
           });
         } else if (dProds.length > 0) {
           dProds.forEach((p) => {
             const prodRollVal = p.coils || 0;
             const prodMtrVal = p.mtr || 0;
+            const prodNosVal = p.nos || p.pipe || 0;
+            const prodPipeVal = p.pipe || 0;
+            const prodMtrPipeVal = (p.pipe || 0) * 6;
+            const thousandVal = p.thousandUnit || (prodNosVal / 1000);
 
             let prodQty = 0;
             if (id === "is13488" || id === "is12786") {
@@ -2105,7 +2955,20 @@ export default function SmsEntryPanel() {
               "Production (Mtr)": prodMtrVal,
               "Dispatch (Coils)": 0,
               "Dispatch (Mtr)": 0,
-              "Closing Stock": runningStock
+              "Closing Stock": runningStock,
+              
+              // Standard-independent properties
+              prodRoll: prodRollVal,
+              prodMtr: prodMtrVal,
+              prodNos: prodNosVal,
+              prodPipe: prodPipeVal,
+              prodMtrPipe: prodMtrPipeVal,
+              dispMtr: 0,
+              dispNos: 0,
+              dispPipe: 0,
+              dispMtrPipe: 0,
+              closingStock: runningStock,
+              thousandUnit: thousandVal
             });
           });
         } else {
@@ -2120,7 +2983,20 @@ export default function SmsEntryPanel() {
             "Production (Mtr)": 0,
             "Dispatch (Coils)": 0,
             "Dispatch (Mtr)": 0,
-            "Closing Stock": runningStock
+            "Closing Stock": runningStock,
+            
+            // Standard-independent properties
+            prodRoll: 0,
+            prodMtr: 0,
+            prodNos: 0,
+            prodPipe: 0,
+            prodMtrPipe: 0,
+            dispMtr: 0,
+            dispNos: 0,
+            dispPipe: 0,
+            dispMtrPipe: 0,
+            closingStock: runningStock,
+            thousandUnit: 0
           });
         }
       }
@@ -2154,6 +3030,7 @@ export default function SmsEntryPanel() {
     // Helper to format size name for IS 13488 sheet tabs
     const getIs13488SheetName = (sz: string) => {
       let upper = sz.toUpperCase();
+      upper = upper.replace(/CL\s*-\s*3|CL\s*-\s*III|CL\s*3|CL\s*III/g, "CL - III");
       upper = upper.replace(/CL\s*-\s*2|CL\s*-\s*II|CL\s*2|CL\s*II/g, "CL - II");
       upper = upper.replace(/CL\s*-\s*1|CL\s*-\s*I|CL\s*1|CL\s*I/g, "CL - I");
       upper = upper.replace(/(\d+)\s*MM/g, "$1 MM");
@@ -2169,18 +3046,23 @@ export default function SmsEntryPanel() {
       return Math.round((utcDate - excelBaseDate) / msPerDay);
     };
 
-    if (id === "is13488") {
+    if (id === "is13488" || id === "is13487" || id === "is12786" || id === "is4985" || id === "is17425" || id === "is14483") {
       // -------------------------------------------------------------
-      // Custom Export Layout for IS 13488 - Daily Stock Register
+      // Custom Export Layout for IS 13488, IS 13487, IS 12786, and IS 4985
       // -------------------------------------------------------------
-      sizesToExport.forEach((sz) => {
-        // Load size-specific date filters if available, else fallback to global page states
-        const szFromMonth = localStorage.getItem(`sms_stock_from_month_${id}_${sz}`) || fromMonth || "January";
-        const szFromYear = localStorage.getItem(`sms_stock_from_year_${id}_${sz}`) || fromYear || "2026";
-        const szToMonth = localStorage.getItem(`sms_stock_to_month_${id}_${sz}`) || toMonth || "December";
-        const szToYear = localStorage.getItem(`sms_stock_to_year_${id}_${sz}`) || toYear || "2026";
+      const isMultiColumnLedger = id === "is13488" || id === "is12786";
+      const maxCols = isMultiColumnLedger ? 13 : 12;
+      const sidebarStartCol = isMultiColumnLedger ? 9 : 8;
+      const mainTableEndCol = isMultiColumnLedger ? 7 : 6;
+      const monthColLetter = isMultiColumnLedger ? "J" : "I";
 
-        const sizeLedgerRows = getFullStockLedgerForSize(sz);
+      sizesToExport.forEach((sz) => {
+        const szFromMonth = fromMonth || "January";
+        const szFromYear = fromYear || "2026";
+        const szToMonth = toMonth || "December";
+        const szToYear = toYear || "2026";
+
+        const sizeLedgerRows = getFullStockLedgerForSize(sz, fromMonth, fromYear, toMonth, toYear);
         
         // Filter rows by size-specific selected range
         const filteredRows = sizeLedgerRows.filter((entry: any) => {
@@ -2247,12 +3129,21 @@ export default function SmsEntryPanel() {
             return rYr === yr && rMo === mo;
           });
 
-          const sumProd = monthRows.reduce((sum: number, r: any) => sum + (r["Production (Mtr)"] || 0), 0);
-          const sumDisp = monthRows.reduce((sum: number, r: any) => sum + (r["Dispatch (Mtr)"] || 0), 0);
+          const sumProd = monthRows.reduce((sum: number, r: any) => {
+            if (id === "is13488" || id === "is12786") return sum + (r["Production (Mtr)"] || r.prodMtr || 0);
+            if (id === "is4985") return sum + (r.prodPipe || 0);
+            return sum + (r.prodNos || 0);
+          }, 0);
+          const sumDisp = monthRows.reduce((sum: number, r: any) => {
+            if (id === "is13488" || id === "is12786") return sum + (r["Dispatch (Mtr)"] || r.dispMtr || 0);
+            if (id === "is4985") return sum + (r.dispPipe || 0);
+            return sum + (r.dispNos || 0);
+          }, 0);
           
           let closeStock = 0;
           if (monthRows.length > 0) {
-            closeStock = monthRows[monthRows.length - 1]["Closing Stock"] || 0;
+            const lastRow = monthRows[monthRows.length - 1];
+            closeStock = lastRow["Closing Stock"] || lastRow.closingStock || 0;
           }
 
           monthlySummaries.push({ monthSerial, sumProd, sumDisp, closeStock });
@@ -2262,28 +3153,38 @@ export default function SmsEntryPanel() {
         const aoa: any[][] = [];
         const maxHeaderRows = Math.max(6, 2 + rangePeriods.length);
         for (let i = 0; i < maxHeaderRows; i++) {
-          aoa.push(new Array(13).fill(null));
+          aoa.push(new Array(maxCols).fill(null));
         }
 
         // Row 1 (Index 0)
         aoa[0][0] = " PARAGON IRRIGATION PVT. LTD.";
-        aoa[0][9] = "Month";
-        aoa[0][10] = "Sum of Production";
-        aoa[0][11] = "Sum of Dispatch";
-        aoa[0][12] = "Cloasing Stock";
+        aoa[0][sidebarStartCol] = "Month";
+        aoa[0][sidebarStartCol + 1] = "Sum of Production";
+        aoa[0][sidebarStartCol + 2] = "Sum of Dispatch";
+        aoa[0][sidebarStartCol + 3] = "Cloasing Stock";
 
         // Row 2 onwards summary sidebar
         monthlySummaries.forEach((summary, idx) => {
           const targetRow = 1 + idx;
-          aoa[targetRow][9] = summary.monthSerial;
-          aoa[targetRow][10] = summary.sumProd;
-          aoa[targetRow][11] = summary.sumDisp;
-          aoa[targetRow][12] = summary.closeStock;
+          aoa[targetRow][sidebarStartCol] = summary.monthSerial;
+          aoa[targetRow][sidebarStartCol + 1] = summary.sumProd;
+          aoa[targetRow][sidebarStartCol + 2] = summary.sumDisp;
+          aoa[targetRow][sidebarStartCol + 3] = summary.closeStock;
         });
 
         // Row 3 (Index 2)
-        const formattedSizeName = getIs13488SheetName(sz);
-        aoa[2][0] = ` IS CODE : 13488 EMITTING PIPE (${formattedSizeName})`;
+        const formattedSizeName = isMultiColumnLedger ? getIs13488SheetName(sz) : sz.toUpperCase();
+        aoa[2][0] = id === "is12786"
+          ? ` IS CODE : 12786 PLAIN LATERALS (${formattedSizeName})`
+          : id === "is13488"
+            ? ` IS CODE : 13488 EMITTING PIPE (${formattedSizeName})`
+            : id === "is4985"
+              ? ` IS CODE : 4985 UPVC PIPE (${formattedSizeName})`
+              : id === "is17425"
+                ? ` IS CODE : 17425 HDPE PIPE (${formattedSizeName})`
+                : id === "is14483"
+                  ? ` IS CODE : 14483 VENTURI INJECTOR (${formattedSizeName})`
+                  : ` IS CODE : 13487 EMITTERS (${formattedSizeName})`;
 
         // Row 4 (Index 3) range info
         const fromMStr = (fromMIdx + 1) < 10 ? `0${fromMIdx + 1}` : `${fromMIdx + 1}`;
@@ -2297,30 +3198,53 @@ export default function SmsEntryPanel() {
         aoa[3][2] = "To";
         aoa[3][3] = rangeEndSerial;
         aoa[3][4] = precedingStockLabel;
-        aoa[3][7] = precedingStockVal;
+        aoa[3][mainTableEndCol] = precedingStockVal;
 
         // Row 6 (Index 5) headers
         aoa[5][0] = "Date";
         aoa[5][1] = "Party Name";
         aoa[5][2] = "Bill No";
         aoa[5][3] = "Batch No";
-        aoa[5][4] = "MFG in Roll";
-        aoa[5][5] = " MFG in Meter";
-        aoa[5][6] = "Dispatch QTY in Meter";
-        aoa[5][7] = "C. S in Meter";
+        if (id === "is13488" || id === "is12786") {
+          aoa[5][4] = "MFG in Roll";
+          aoa[5][5] = " MFG in Meter";
+          aoa[5][6] = "Dispatch QTY in Meter";
+          aoa[5][7] = "C. S in Meter";
+        } else if (id === "is4985") {
+          aoa[5][4] = "MFG in Pipe";
+          aoa[5][5] = "Dispatch Qty in Pipe";
+          aoa[5][6] = "C. S in Pipe";
+        } else {
+          aoa[5][4] = "MFG in Nos";
+          aoa[5][5] = "Dispatch QTY in Nos";
+          aoa[5][6] = "C. S in Nos";
+        }
 
         // Row 7 onwards ledger rows
-        filteredRows.forEach((r: any) => {
-          const rowData = new Array(13).fill(null);
+        filteredRows.forEach((r: any, idx) => {
+          const targetRow = 6 + idx;
+          if (!aoa[targetRow]) {
+            aoa[targetRow] = new Array(maxCols).fill(null);
+          }
+          const rowData = aoa[targetRow];
           rowData[0] = dateToExcelSerial(r.Date);
           rowData[1] = r["Party Name"] || r.partyName || "-";
           rowData[2] = r["Bill No"] || r.billNo || "-";
           rowData[3] = r["Batch No"] || r.batchNo || "-";
-          rowData[4] = r["Production (Coils)"] || r.prodRoll || 0;
-          rowData[5] = r["Production (Mtr)"] || r.prodMtr || 0;
-          rowData[6] = r["Dispatch (Mtr)"] || r.dispMtr || 0;
-          rowData[7] = r["Closing Stock"] || r.closingStock || 0;
-          aoa.push(rowData);
+          if (id === "is13488" || id === "is12786") {
+            rowData[4] = r["Production (Coils)"] || r.prodRoll || 0;
+            rowData[5] = r["Production (Mtr)"] || r.prodMtr || 0;
+            rowData[6] = r["Dispatch (Mtr)"] || r.dispMtr || 0;
+            rowData[7] = r["Closing Stock"] || r.closingStock || 0;
+          } else if (id === "is4985") {
+            rowData[4] = r.prodPipe || 0;
+            rowData[5] = r.dispPipe || 0;
+            rowData[6] = r.closingStock || 0;
+          } else {
+            rowData[4] = r.prodNos || 0;
+            rowData[5] = r.dispNos || 0;
+            rowData[6] = r.closingStock || 0;
+          }
         });
 
         // Create Worksheet
@@ -2328,10 +3252,10 @@ export default function SmsEntryPanel() {
 
         // Define Merges
         ws["!merges"] = [
-          { s: { r: 0, c: 0 }, e: { r: 1, c: 7 } }, // A1:H2
-          { s: { r: 2, c: 0 }, e: { r: 2, c: 7 } }, // A3:H3
-          { s: { r: 3, c: 4 }, e: { r: 3, c: 6 } }, // E4:G4
-          { s: { r: 4, c: 0 }, e: { r: 4, c: 7 } }  // A5:H5
+          { s: { r: 0, c: 0 }, e: { r: 1, c: mainTableEndCol } }, // A1:H2 or A1:G2
+          { s: { r: 2, c: 0 }, e: { r: 2, c: mainTableEndCol } }, // A3:H3 or A3:G3
+          { s: { r: 3, c: 4 }, e: { r: 3, c: mainTableEndCol - 1 } }, // E4:G4 or E4:F4
+          { s: { r: 4, c: 0 }, e: { r: 4, c: mainTableEndCol } }  // A5:H5 or A5:G5
         ];
 
         // Row Heights
@@ -2383,25 +3307,25 @@ export default function SmsEntryPanel() {
           }
         };
 
-        // 1. Company Title (A1:H2) - Center + middle Align, Size 20, bold, apply outside border
+        // 1. Company Title - Center + middle Align, Size 20, bold, apply outside border
         for (let r = 0; r <= 1; r++) {
-          for (let c = 0; c <= 7; c++) {
+          for (let c = 0; c <= mainTableEndCol; c++) {
             styleCell(ws, r, c, {
               font: { name: "Calibri", sz: 20, bold: true, color: { rgb: "000000" } },
               alignment: { horizontal: "center", vertical: "center" }
             });
           }
         }
-        applyOutsideBorder(ws, 0, 0, 1, 7);
+        applyOutsideBorder(ws, 0, 0, 1, mainTableEndCol);
 
-        // 2. IS code and size (A3:H3) - Center + middle Align, outside border
-        for (let c = 0; c <= 7; c++) {
+        // 2. IS code and size - Center + middle Align, outside border
+        for (let c = 0; c <= mainTableEndCol; c++) {
           styleCell(ws, 2, c, {
             font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "000000" } },
             alignment: { horizontal: "center", vertical: "center" }
           });
         }
-        applyOutsideBorder(ws, 2, 0, 2, 7);
+        applyOutsideBorder(ws, 2, 0, 2, mainTableEndCol);
 
         // 3. A4, B4, C4, D4 - center + middle Align, outside border for A4:D4
         for (let c = 0; c <= 3; c++) {
@@ -2411,43 +3335,40 @@ export default function SmsEntryPanel() {
         }
         applyOutsideBorder(ws, 3, 0, 3, 3);
 
-        // 4. "C.S. in ..." (Merge E4:G4) - Right + middle Align, outside border for E4:H4
-        for (let c = 4; c <= 6; c++) {
+        // 4. "C.S. in ..." - Right + middle Align, outside border
+        for (let c = 4; c <= mainTableEndCol - 1; c++) {
           styleCell(ws, 3, c, {
             alignment: { horizontal: "right", vertical: "center" }
           });
         }
-        styleCell(ws, 3, 7, {
+        styleCell(ws, 3, mainTableEndCol, {
           alignment: { horizontal: "center", vertical: "center" }
         });
-        applyOutsideBorder(ws, 3, 4, 3, 7);
+        applyOutsideBorder(ws, 3, 4, 3, mainTableEndCol);
 
-        // 5. A5:H5 (Merge, fill with Black, height 6px, outside border)
-        for (let c = 0; c <= 7; c++) {
+        // 5. Black divider row
+        for (let c = 0; c <= mainTableEndCol; c++) {
           styleCell(ws, 4, c, {
             fill: { fgColor: { rgb: "000000" } }
           });
         }
-        applyOutsideBorder(ws, 4, 0, 4, 7);
+        applyOutsideBorder(ws, 4, 0, 4, mainTableEndCol);
 
-        // 6. Heading of Daily Stock Ledger Table (Row 6) - Center + middle, Olive Green Accent 3 fill, border to whole table
+        // 6. Heading of Daily Stock Ledger Table (Row 6)
         const lastTableR = 5 + filteredRows.length;
         for (let r = 5; r <= lastTableR; r++) {
           const isHeader = r === 5;
-          for (let c = 0; c <= 7; c++) {
+          for (let c = 0; c <= mainTableEndCol; c++) {
             let align: any = undefined;
             if (isHeader) {
               align = { horizontal: "center", vertical: "center" };
             } else {
               // Non-header row alignments
               if (c === 0 || c === 1 || c === 3) {
-                // A (Date), B (Party Name), D (Batch No) center + middle aligned
                 align = { horizontal: "center", vertical: "center" };
               } else if (c >= 4) {
-                // Numbers right aligned
                 align = { horizontal: "right", vertical: "center" };
               } else {
-                // Bill No left aligned
                 align = { horizontal: "left", vertical: "center" };
               }
             }
@@ -2468,14 +3389,14 @@ export default function SmsEntryPanel() {
           }
         }
 
-        // 7. Monthly Summary Sidebar (Columns J–M) - Center + middle Align, apply border
+        // 7. Monthly Summary Sidebar
         const lastSummaryR = rangePeriods.length;
         for (let r = 0; r <= lastSummaryR; r++) {
           const isHeader = r === 0;
-          for (let c = 9; c <= 12; c++) {
+          for (let c = sidebarStartCol; c <= sidebarStartCol + 3; c++) {
             styleCell(ws, r, c, {
               font: { name: "Calibri", sz: 10, bold: isHeader },
-              fill: isHeader ? { fgColor: { rgb: "D9E1F2" } } : undefined, // Light summary header color
+              fill: isHeader ? { fgColor: { rgb: "D9E1F2" } } : undefined,
               alignment: { horizontal: "center", vertical: "center" },
               border: {
                 top: { style: "thin", color: { rgb: "000000" } },
@@ -2504,30 +3425,47 @@ export default function SmsEntryPanel() {
             cell.t = "n";
             cell.z = "dd/mm/yyyy";
           }
-          if (colLetter === "J" && rowNum >= 2 && rowNum < 6) {
+          if (colLetter === monthColLetter && rowNum >= 2 && rowNum <= 1 + rangePeriods.length) {
             cell.t = "n";
             cell.z = "mmm-yy";
           }
         });
 
         // Set column widths using scaled-down character widths (wch)
-        ws["!cols"] = [
-          { wch: 11.44 }, // A: Date (decreased from 15.00)
-          { wch: 9.81  }, // B: Party Name (decreased from 12.86)
-          { wch: 13.62 }, // C: Bill No (decreased from 17.86)
-          { wch: 9.81  }, // D: Batch No (decreased from 12.86)
-          { wch: 9.59  }, // E: MFG in Roll (decreased from 12.57)
-          { wch: 11.77 }, // F: MFG in Meter (decreased from 15.43)
-          { wch: 18.20 }, // G: Dispatch QTY in Meter (decreased from 23.86)
-          { wch: 10.57 }, // H: C. S in Meter (decreased from 13.86)
-          { wch: 3.00  }, // I: spacer
-          { wch: 12.00 }, // J: Month
-          { wch: 18.00 }, // K: Sum of Production
-          { wch: 18.00 }, // L: Sum of Dispatch
-          { wch: 15.00 }  // M: Closing Stock
-        ];
+        if (isMultiColumnLedger) {
+          ws["!cols"] = [
+            { wch: 11.44 }, // A: Date
+            { wch: 9.81  }, // B: Party Name
+            { wch: 13.62 }, // C: Bill No
+            { wch: 9.81  }, // D: Batch No
+            { wch: 11.00 }, // E: MFG in Roll / Pipe
+            { wch: 11.77 }, // F: MFG in Meter
+            { wch: 18.20 }, // G: Dispatch QTY in Meter
+            { wch: 10.57 }, // H: C. S in Meter / Pipe
+            { wch: 3.00  }, // I: spacer
+            { wch: 12.00 }, // J: Month
+            { wch: 18.00 }, // K: Sum of Production
+            { wch: 18.00 }, // L: Sum of Dispatch
+            { wch: 15.00 }  // M: Closing Stock
+          ];
+        } else {
+          ws["!cols"] = [
+            { wch: 11.44 }, // A: Date
+            { wch: 9.81  }, // B: Party Name
+            { wch: 13.62 }, // C: Bill No
+            { wch: 9.81  }, // D: Batch No
+            { wch: 11.00 }, // E: MFG in Nos
+            { wch: 18.20 }, // F: Dispatch QTY in Nos
+            { wch: 11.00 }, // G: C. S in Nos
+            { wch: 3.00  }, // H: spacer
+            { wch: 12.00 }, // I: Month
+            { wch: 18.00 }, // J: Sum of Production
+            { wch: 18.00 }, // K: Sum of Dispatch
+            { wch: 15.00 }  // L: Closing Stock
+          ];
+        }
 
-        const sheetName = getIs13488SheetName(sz);
+        const sheetName = isMultiColumnLedger ? getIs13488SheetName(sz) : sz.toUpperCase();
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
         hasSheets = true;
       });
@@ -2591,9 +3529,27 @@ export default function SmsEntryPanel() {
 
         // 3. Stock Ledger for this size
         if (forceStock) {
-          const rows = getFullStockLedgerForSize(sz);
-          if (rows.length > 0) {
-            const formattedRows = rows.map(r => ({
+          const rows = getFullStockLedgerForSize(sz, fromMonth, fromYear, toMonth, toYear);
+          const filteredRows = rows.filter((entry: any) => {
+            const parts = entry.Date.split("-");
+            if (parts.length < 2) return false;
+            const y = Number(parts[0]);
+            const m = Number(parts[1]);
+            const mIdx = m - 1;
+
+            const fromMIdx = MONTHS.indexOf(fromMonth);
+            const fromYrVal = Number(fromYear);
+            const toMIdx = MONTHS.indexOf(toMonth);
+            const toYrVal = Number(toYear);
+
+            const isAfterFrom = y > fromYrVal || (y === fromYrVal && mIdx >= fromMIdx);
+            const isBeforeTo = y < toYrVal || (y === toYrVal && mIdx <= toMIdx);
+
+            return isAfterFrom && isBeforeTo;
+          });
+
+          if (filteredRows.length > 0) {
+            const formattedRows = filteredRows.map(r => ({
               ...r,
               "Date": formatDateToDMY(r.Date)
             }));
@@ -2611,7 +3567,7 @@ export default function SmsEntryPanel() {
       return;
     }
 
-    if (id === "is13488") {
+    if (id === "is13488" || id === "is13487" || id === "is12786" || id === "is4985" || id === "is17425" || id === "is14483") {
       XLSXStyle.writeFile(wb, `${id?.toUpperCase()}_Inventory_Report.xlsx`);
     } else {
       XLSX.writeFile(wb, `${id?.toUpperCase()}_Inventory_Report.xlsx`);
@@ -2643,8 +3599,26 @@ export default function SmsEntryPanel() {
         {/* Title Section */}
         <div className="mb-8 border-b border-slate-900 pb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {entryTypeLabel}
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-3">
+              <span>{entryTypeLabel}</span>
+              {isOnline ? (
+                isSyncing ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 animate-pulse">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    <span>Syncing...</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span>Cloud Synced</span>
+                  </span>
+                )
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>Local Mode</span>
+                </span>
+              )}
             </h1>
             <p className="text-slate-400 text-xs mt-1">
               Standard: <span className="text-slate-200 font-semibold">{currentStandard.name} ({currentStandard.subName})</span>
@@ -2956,6 +3930,19 @@ export default function SmsEntryPanel() {
                     className="w-full bg-slate-950 border border-slate-900 focus:border-indigo-500 text-slate-100 rounded-xl px-3 py-2 text-xs focus:outline-none transition-colors"
                   />
 
+                  <div className="flex items-center gap-2 px-1">
+                    <input
+                      type="checkbox"
+                      id="showSavedOnlyCheckbox"
+                      checked={showSavedOnly}
+                      onChange={(e) => setShowSavedOnly(e.target.checked)}
+                      className="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-3.5 h-3.5"
+                    />
+                    <label htmlFor="showSavedOnlyCheckbox" className="text-[11px] font-semibold text-slate-400 cursor-pointer select-none hover:text-slate-300 transition-colors">
+                      Show registered/saved consignees only
+                    </label>
+                  </div>
+
                   <div className="max-h-48 overflow-y-auto space-y-2.5 bg-slate-950/40 p-4 border border-slate-900 rounded-xl">
                     {activeConsignees.length === 0 ? (
                       <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
@@ -2967,6 +3954,7 @@ export default function SmsEntryPanel() {
                       .filter(name => name.toLowerCase().includes(consigneeSearch.toLowerCase()))
                       .map((name) => {
                         const isChecked = selectedConsignees.includes(name);
+                        const isSaved = registeredNames.has(getCleanConsigneeName(name).toLowerCase());
                         return (
                           <label key={name} className="flex items-center gap-3 cursor-pointer text-xs text-slate-300 hover:text-slate-100 transition-colors">
                             <input 
@@ -2981,7 +3969,14 @@ export default function SmsEntryPanel() {
                               }}
                               className="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-4 h-4"
                             />
-                            <span className="font-medium">{name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{name}</span>
+                              {isSaved && (
+                                <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider scale-95 origin-left">
+                                  Saved
+                                </span>
+                              )}
+                            </div>
                           </label>
                         );
                       })}
@@ -3078,10 +4073,18 @@ export default function SmsEntryPanel() {
                       <span className="ml-2 text-xs font-normal text-slate-400">({consigneeReportRows.length} entries)</span>
                     </h3>
                     <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={exportFilename}
+                        onChange={(e) => setExportFilename(e.target.value)}
+                        placeholder="Export filename..."
+                        title="Enter custom filename for Excel export"
+                        className="bg-slate-950 border border-slate-900 focus:border-indigo-500 text-slate-100 rounded-xl px-3 py-1.5 text-xs focus:outline-none transition-colors h-8 font-medium w-48"
+                      />
                       <button
                         type="button"
                         onClick={() => setConsigneeReportRows([])}
-                        className="px-3 py-1.5 bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white rounded-lg text-[10px] font-bold transition-all"
+                        className="px-3 py-1.5 bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white rounded-lg text-[10px] font-bold transition-all h-8"
                       >
                         Clear All
                       </button>
@@ -3118,12 +4121,12 @@ export default function SmsEntryPanel() {
                           }
                           return consigneeReportRows.map((row, idx) => {
                             const obj = registeredObjects.find(
-                              r => r && r.name && r.name.toLowerCase() === row.consigneeName.toLowerCase()
+                              r => r && r.name && getCleanConsigneeName(r.name).toLowerCase() === getCleanConsigneeName(row.consigneeName).toLowerCase()
                             ) || {};
                             return (
                               <tr key={`${row.consigneeName}-${row.month}-${row.year}`} className="hover:bg-slate-900/10 text-slate-300">
                                 <td className="p-3 font-semibold text-slate-400">PARAGON</td>
-                                <td className="p-3 font-bold text-slate-100">{row.consigneeName}</td>
+                                <td className="p-3 font-bold text-slate-100">{obj.name || row.consigneeName}</td>
                                 <td className="p-3 text-slate-350 max-w-[250px] truncate" title={obj.address || ""}>
                                   {obj.address || "-"}
                                 </td>
@@ -3768,13 +4771,37 @@ export default function SmsEntryPanel() {
 
               {/* Data Table Card */}
               <div className="bg-slate-900/10 border border-slate-900 rounded-2xl overflow-hidden">
-                <div className="p-5 border-b border-slate-900 flex items-center justify-between">
+                <div className="p-5 border-b border-slate-900 flex items-center justify-between flex-wrap gap-3">
                   <h3 className="text-sm font-bold text-slate-300">
                     Dispatch Logs - {selectedSize}
                   </h3>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-semibold">
-                    {filteredEntries.length} Records
-                  </span>
+                  <div className="flex items-center gap-3">
+                    {id === "is12786" && selectedSize === "20mm Cl-1" && (
+                      <>
+                        <label className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl px-3 py-2 font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all border border-emerald-500/30 cursor-pointer">
+                          <Upload className="w-3.5 h-3.5" />
+                          Import 20mm Cl-1 Excel
+                          <input 
+                            type="file" 
+                            accept=".xlsx, .xls" 
+                            onChange={handleImportDispExcel} 
+                            className="hidden" 
+                          />
+                        </label>
+                        <Button
+                          onClick={handleReconcileCl1}
+                          size="sm"
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl px-3 py-2 font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-500/20 transition-all border border-indigo-500/30 cursor-pointer"
+                        >
+                          <Workflow className="w-3.5 h-3.5" />
+                          Reconcile & Combine from 20mm Cl-2
+                        </Button>
+                      </>
+                    )}
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-semibold">
+                      {filteredEntries.length} Records
+                    </span>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">

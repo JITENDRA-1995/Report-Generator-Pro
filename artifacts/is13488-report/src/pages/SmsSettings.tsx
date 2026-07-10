@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { defaultConsignees } from "@/lib/defaultConsignees";
+import { supabase } from "@/lib/supabase";
+import * as smsStorage from "@/lib/smsStorage";
 import { 
   Settings, 
   Sliders, 
@@ -127,6 +130,7 @@ interface ConversionItem {
 }
 
 export interface ConsigneeDetails {
+  id?: string;
   name: string;
   address?: string;
   country?: string;
@@ -291,12 +295,23 @@ export default function SmsSettings() {
     setConversions(Array.from(map.values()).sort((a, b) => a.standardId.localeCompare(b.standardId) || a.sizeName.localeCompare(b.sizeName)));
   };
 
-  const loadConsigneesList = () => {
+  const loadConsigneesList = async () => {
+    const defaultsToRemove = new Set([
+      "Jain Irrigation Systems Ltd",
+      "Netafim Irrigation India Pvt Ltd",
+      "GGRC (Gujarat Green Revolution)",
+      "Premier Irrigation Adritec",
+      "Mahindra EPC Irrigation"
+    ]);
+
     const stored = localStorage.getItem("sms_consignees");
+    const seeded = localStorage.getItem("sms_consignees_seeded_v1");
+
+    let currentList: any[] = [];
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        const mapped = parsed.map((c: any) => {
+        currentList = parsed.map((c: any) => {
           if (typeof c === "string") {
             return { name: c, address: "", country: "India", state: "", district: "", city: "", pincode: "", telephone: "", mobile: "", email: "" };
           }
@@ -313,20 +328,37 @@ export default function SmsSettings() {
             email: c.email || ""
           };
         });
-        setConsigneesList(mapped);
       } catch (e) {
-        setConsigneesList([]);
+        currentList = [];
       }
+    }
+
+    const cleanedList = currentList.filter((c: any) => !defaultsToRemove.has(c.name));
+    let finalLocalList = cleanedList;
+
+    if (!seeded) {
+      const existingNames = new Set(cleanedList.map(c => c.name.toLowerCase()));
+      const mergedList = [...cleanedList];
+      defaultConsignees.forEach(d => {
+        if (!existingNames.has(d.name.toLowerCase())) {
+          mergedList.push(d);
+        }
+      });
+      localStorage.setItem("sms_consignees", JSON.stringify(mergedList));
+      localStorage.setItem("sms_consignees_seeded_v1", "true");
+      finalLocalList = mergedList;
     } else {
-      const defaults = [
-        { name: "Jain Irrigation Systems Ltd", address: "", country: "India", state: "", district: "", city: "", pincode: "", telephone: "", mobile: "", email: "" },
-        { name: "Netafim Irrigation India Pvt Ltd", address: "", country: "India", state: "", district: "", city: "", pincode: "", telephone: "", mobile: "", email: "" },
-        { name: "GGRC (Gujarat Green Revolution)", address: "", country: "India", state: "", district: "", city: "", pincode: "", telephone: "", mobile: "", email: "" },
-        { name: "Premier Irrigation Adritec", address: "", country: "India", state: "", district: "", city: "", pincode: "", telephone: "", mobile: "", email: "" },
-        { name: "Mahindra EPC Irrigation", address: "", country: "India", state: "", district: "", city: "", pincode: "", telephone: "", mobile: "", email: "" }
-      ];
-      localStorage.setItem("sms_consignees", JSON.stringify(defaults));
-      setConsigneesList(defaults);
+      if (cleanedList.length !== currentList.length) {
+        localStorage.setItem("sms_consignees", JSON.stringify(cleanedList));
+      }
+    }
+    setConsigneesList(finalLocalList);
+
+    try {
+      const cloudList = await smsStorage.syncConsigneesFromCloud();
+      setConsigneesList(cloudList);
+    } catch (err) {
+      console.error("Failed to sync consignees list from cloud:", err);
     }
   };
 
@@ -347,7 +379,8 @@ export default function SmsSettings() {
       return;
     }
 
-    const newConsigneeObj: ConsigneeDetails = {
+    const newConsigneeObj: any = {
+      id: Math.random().toString(36).substring(2, 9),
       name: trimmedName,
       address: newConsigneeAddress.trim(),
       country: newConsigneeCountry.trim(),
@@ -361,8 +394,8 @@ export default function SmsSettings() {
     };
 
     const updated = [...consigneesList, newConsigneeObj].sort((a, b) => a.name.localeCompare(b.name));
-    localStorage.setItem("sms_consignees", JSON.stringify(updated));
     setConsigneesList(updated);
+    smsStorage.saveConsignee(newConsigneeObj);
 
     // Reset inputs
     setNewConsigneeName("");
@@ -398,8 +431,8 @@ export default function SmsSettings() {
     };
 
     updated.sort((a, b) => a.name.localeCompare(b.name));
-    localStorage.setItem("sms_consignees", JSON.stringify(updated));
     setConsigneesList(updated);
+    smsStorage.saveConsignee(updated[index]);
     setEditingConsigneeIdx(null);
     setEditingConsigneeVal(null);
   };
@@ -412,21 +445,98 @@ export default function SmsSettings() {
       destructive: true,
       action: () => {
         const updated = consigneesList.filter(n => n.name !== name);
-        localStorage.setItem("sms_consignees", JSON.stringify(updated));
+        const deletedObj = consigneesList.find(n => n.name === name);
         setConsigneesList(updated);
+        if (deletedObj) {
+          smsStorage.deleteConsignee(deletedObj.id || "", deletedObj.name);
+        }
         setConfirmModal(null);
       }
     });
   };
 
+  const saveStartingStockKey = async (key: string, val: number) => {
+    localStorage.setItem(key, val.toString());
+    if (smsStorage.isCloudEnabled()) {
+      const parts = key.split("_");
+      if (parts.length >= 4) {
+        const stdId = parts[3];
+        let size = "";
+        let year = 2026;
+        let month = "January";
+        if (parts.length >= 7) {
+          month = parts[parts.length - 1];
+          year = Number(parts[parts.length - 2]);
+          size = parts.slice(4, parts.length - 2).join("_");
+        } else {
+          size = parts.slice(4).join("_");
+          year = 0;
+          month = "Global";
+        }
+        try {
+          await supabase.from("sms_starting_stocks").upsert({
+            id: key,
+            standard_id: stdId,
+            size: size,
+            year: year,
+            month: month,
+            val: val,
+            updated_at: new Date().toISOString()
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  };
+
+  const deleteStartingStockKey = async (key: string) => {
+    localStorage.removeItem(key);
+    if (smsStorage.isCloudEnabled()) {
+      try {
+        await supabase.from("sms_starting_stocks").delete().eq("id", key);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const saveConversionSetting = async (stdId: string, key: string, val: string) => {
+    localStorage.setItem(key, val);
+    if (smsStorage.isCloudEnabled()) {
+      try {
+        await supabase.from("sms_conversion_settings").upsert({
+          id: key,
+          standard_id: stdId,
+          key: key,
+          val: val,
+          updated_at: new Date().toISOString()
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const deleteConversionSetting = async (key: string) => {
+    localStorage.removeItem(key);
+    if (smsStorage.isCloudEnabled()) {
+      try {
+        await supabase.from("sms_conversion_settings").delete().eq("id", key);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
   // Update an existing override
-  const handleSaveEdit = (key: string) => {
+  const handleSaveEdit = async (key: string) => {
     const valNum = Number(editingValue);
     if (isNaN(valNum) || valNum < 0) {
       alert("Please enter a valid positive number.");
       return;
     }
-    localStorage.setItem(key, valNum.toString());
+    await saveStartingStockKey(key, valNum);
     setEditingKey(null);
     loadOverrides();
   };
@@ -438,8 +548,8 @@ export default function SmsSettings() {
       title: "Delete Stock Override?",
       message: `Are you sure you want to delete the starting stock override for "${key.replace("sms_last_stock_", "")}"? The system will fallback to 0 or its global configuration.`,
       destructive: true,
-      action: () => {
-        localStorage.removeItem(key);
+      action: async () => {
+        await deleteStartingStockKey(key);
         loadOverrides();
         setConfirmModal(null);
       }
@@ -447,7 +557,7 @@ export default function SmsSettings() {
   };
 
   // Create a new override
-  const handleAddOverride = (e: React.FormEvent) => {
+  const handleAddOverride = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddError("");
     const valNum = Number(newValue);
@@ -468,13 +578,13 @@ export default function SmsSettings() {
       return;
     }
 
-    localStorage.setItem(key, valNum.toString());
+    await saveStartingStockKey(key, valNum);
     setNewValue("");
     loadOverrides();
   };
 
   // Create or Update conversion factors
-  const handleAddConversion = (e: React.FormEvent) => {
+  const handleAddConversion = async (e: React.FormEvent) => {
     e.preventDefault();
     setConvError("");
     
@@ -494,15 +604,15 @@ export default function SmsSettings() {
     const valueKey = `sms_conv_value_${convStd}_${convSize}`;
 
     if (convWeight) {
-      localStorage.setItem(weightKey, weightNum.toString());
+      await saveConversionSetting(convStd, weightKey, weightNum.toString());
     } else {
-      localStorage.removeItem(weightKey);
+      await deleteConversionSetting(weightKey);
     }
 
     if (convValue) {
-      localStorage.setItem(valueKey, valueNum.toString());
+      await saveConversionSetting(convStd, valueKey, valueNum.toString());
     } else {
-      localStorage.removeItem(valueKey);
+      await deleteConversionSetting(valueKey);
     }
 
     setConvWeight("");
@@ -511,7 +621,7 @@ export default function SmsSettings() {
   };
 
   // Save inline edits for conversion rates
-  const handleSaveConvEdit = (standardId: string, sizeName: string) => {
+  const handleSaveConvEdit = async (standardId: string, sizeName: string) => {
     const weightNum = Number(editingConvWeight);
     const valueNum = Number(editingConvValue);
 
@@ -524,15 +634,15 @@ export default function SmsSettings() {
     const valueKey = `sms_conv_value_${standardId}_${sizeName}`;
 
     if (weightNum > 0) {
-      localStorage.setItem(weightKey, weightNum.toString());
+      await saveConversionSetting(standardId, weightKey, weightNum.toString());
     } else {
-      localStorage.removeItem(weightKey);
+      await deleteConversionSetting(weightKey);
     }
 
     if (valueNum > 0) {
-      localStorage.setItem(valueKey, valueNum.toString());
+      await saveConversionSetting(standardId, valueKey, valueNum.toString());
     } else {
-      localStorage.removeItem(valueKey);
+      await deleteConversionSetting(valueKey);
     }
 
     setEditingConvKey(null);
@@ -546,9 +656,9 @@ export default function SmsSettings() {
       title: "Delete Conversion Rates?",
       message: `Are you sure you want to delete configured conversion rates (weight and standard value) for size "${sizeName}"? production logs for this size will return to manual typing mode.`,
       destructive: true,
-      action: () => {
-        localStorage.removeItem(`sms_conv_weight_${standardId}_${sizeName}`);
-        localStorage.removeItem(`sms_conv_value_${standardId}_${sizeName}`);
+      action: async () => {
+        await deleteConversionSetting(`sms_conv_weight_${standardId}_${sizeName}`);
+        await deleteConversionSetting(`sms_conv_value_${standardId}_${sizeName}`);
         loadConversions();
         setConfirmModal(null);
       }
