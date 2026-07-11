@@ -2368,15 +2368,42 @@ export default function SmsEntryPanel() {
 
   // Clear all consignee-imported dispatch entries
   const handleClearImportedData = async () => {
-    if (tempImportedDispEntries.length === 0) {
+    if (tempImportedDispEntries.length === 0 && importedConsigneeIds.size === 0) {
       alert("No imported consignee data to clear.");
       return;
     }
+    const count = tempImportedDispEntries.length > 0 ? tempImportedDispEntries.length : importedConsigneeIds.size;
     const confirmed = window.confirm(
-      `This will remove ${tempImportedDispEntries.length} imported dispatch entries from the current session. Continue?`
+      `This will remove ${count} imported dispatch entries from the current session. Continue?`
     );
     if (!confirmed) return;
 
+    const idsToClear = new Set([
+      ...tempImportedDispEntries.map(e => e.id),
+      ...Array.from(importedConsigneeIds)
+    ]);
+
+    const filtered = dispEntries.filter(e => !idsToClear.has(e.id));
+    await saveFullDispatchList(filtered);
+
+    // Delete IDs from Supabase in chunks of 100 to prevent 414 Request-URI Too Large errors
+    if (smsStorage.isCloudEnabled() && idsToClear.size > 0) {
+      try {
+        const idList = Array.from(idsToClear);
+        const chunkSize = 100;
+        for (let i = 0; i < idList.length; i += chunkSize) {
+          const chunk = idList.slice(i, i + chunkSize);
+          await supabase
+            .from("sms_dispatch")
+            .delete()
+            .in("id", chunk);
+        }
+      } catch (err) {
+        console.error("Failed to delete imported IDs from Supabase:", err);
+      }
+    }
+
+    localStorage.removeItem(`sms_consignee_imported_ids_${id}`);
     setTempImportedDispEntries([]);
     setImportedConsigneeIds(new Set());
     setConsigneeReportRows([]);

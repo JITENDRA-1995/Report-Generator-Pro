@@ -837,12 +837,16 @@ export default function SmsSettings() {
               }
             }
 
-            // Delete from Supabase
+            // Delete from Supabase in chunks of 100 to avoid URI too large errors
             if (smsStorage.isCloudEnabled()) {
-              await supabase
-                .from("sms_dispatch")
-                .delete()
-                .in("id", ids);
+              const chunkSize = 100;
+              for (let i = 0; i < ids.length; i += chunkSize) {
+                const chunk = ids.slice(i, i + chunkSize);
+                await supabase
+                  .from("sms_dispatch")
+                  .delete()
+                  .in("id", chunk);
+              }
             }
           }
         } catch (e) {
@@ -870,22 +874,50 @@ export default function SmsSettings() {
           // Clear locally
           const dispKey = `sms_disp_${stdId}`;
           const rawDisp = localStorage.getItem(dispKey);
+          let legacyIds: string[] = [];
+
+          // Get legacy IDs
+          const trackerKey = `sms_consignee_imported_ids_${stdId}`;
+          const rawIds = localStorage.getItem(trackerKey);
+          if (rawIds) {
+            try {
+              legacyIds = JSON.parse(rawIds);
+            } catch (e) {}
+          }
+
           if (rawDisp) {
             try {
               const entries = JSON.parse(rawDisp);
               if (Array.isArray(entries)) {
-                const filtered = entries.filter((e: any) => !e.isConsigneeImport);
+                const filtered = entries.filter((e: any) => !e.isConsigneeImport && !legacyIds.includes(e.id));
                 localStorage.setItem(dispKey, JSON.stringify(filtered));
               }
             } catch (e) {
               console.error(`Failed to parse dispatch logs for standard ${stdId}:`, e);
             }
           }
+
+          // Delete legacy IDs from Supabase in chunks of 100
+          if (smsStorage.isCloudEnabled() && legacyIds.length > 0) {
+            try {
+              const chunkSize = 100;
+              for (let i = 0; i < legacyIds.length; i += chunkSize) {
+                const chunk = legacyIds.slice(i, i + chunkSize);
+                await supabase
+                  .from("sms_dispatch")
+                  .delete()
+                  .in("id", chunk);
+              }
+            } catch (err) {
+              console.error(`Failed to clear legacy IDs for standard ${stdId} from Supabase:`, err);
+            }
+          }
+
           // Remove legacy import ids tracker if present
-          localStorage.removeItem(`sms_consignee_imported_ids_${stdId}`);
+          localStorage.removeItem(trackerKey);
         }
 
-        // Clear from Cloud (Supabase)
+        // Clear newly imported records with flag from Cloud (Supabase)
         if (smsStorage.isCloudEnabled()) {
           try {
             let query = supabase.from("sms_dispatch").delete().eq("data->>isConsigneeImport", "true");
