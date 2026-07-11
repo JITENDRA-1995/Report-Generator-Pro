@@ -37,6 +37,7 @@ export interface DispatchEntry {
   closePipe?: number;
   prodMtrPipe?: number;
   dispMtrPipe?: number;
+  isConsigneeImport?: boolean;
   synced?: boolean;
 }
 

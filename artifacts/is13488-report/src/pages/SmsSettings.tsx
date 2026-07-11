@@ -202,6 +202,7 @@ export default function SmsSettings() {
   // Import states
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [convImportStatus, setConvImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [clearConsigneeStd, setClearConsigneeStd] = useState<string>("all");
 
   // Load active size list when standard changes
   useEffect(() => {
@@ -316,6 +317,7 @@ export default function SmsSettings() {
     loadOverrides();
     loadConversions();
     loadConsigneesList();
+    cleanupLegacyImportedConsigneeData();
   }, []);
 
   const handleAddConsignee = (e: React.FormEvent) => {
@@ -811,6 +813,94 @@ export default function SmsSettings() {
         loadConversions();
         setConfirmModal(null);
         alert(`Successfully cleared ${typeLabel} for ${stdName}.`);
+      }
+    });
+  };
+
+  const cleanupLegacyImportedConsigneeData = async () => {
+    const standards = ["is13488", "is13487", "is12786", "is4985", "is17425", "is14483"];
+    for (const stdId of standards) {
+      const trackerKey = `sms_consignee_imported_ids_${stdId}`;
+      const rawIds = localStorage.getItem(trackerKey);
+      if (rawIds) {
+        try {
+          const ids: string[] = JSON.parse(rawIds);
+          if (Array.isArray(ids) && ids.length > 0) {
+            // Load and filter local storage dispatch
+            const dispKey = `sms_disp_${stdId}`;
+            const rawDisp = localStorage.getItem(dispKey);
+            if (rawDisp) {
+              const entries = JSON.parse(rawDisp);
+              if (Array.isArray(entries)) {
+                const filtered = entries.filter((e: any) => !ids.includes(e.id) && !e.isConsigneeImport);
+                localStorage.setItem(dispKey, JSON.stringify(filtered));
+              }
+            }
+
+            // Delete from Supabase
+            if (smsStorage.isCloudEnabled()) {
+              await supabase
+                .from("sms_dispatch")
+                .delete()
+                .in("id", ids);
+            }
+          }
+        } catch (e) {
+          console.error(`Error cleaning up legacy imported consignee data for ${stdId}:`, e);
+        } finally {
+          localStorage.removeItem(trackerKey);
+        }
+      }
+    }
+  };
+
+  const handleClearConsigneeSalesData = () => {
+    const stdName = clearConsigneeStd === "all" ? "All Standards" : (smsStandards[clearConsigneeStd]?.name || clearConsigneeStd);
+    setConfirmModal({
+      show: true,
+      title: `Clear Consignee Sales Data for ${stdName}?`,
+      message: `WARNING: This will permanently delete all imported/generated consignee sales dispatch records for ${stdName} from both local storage and the cloud. This operation cannot be undone!`,
+      destructive: true,
+      action: async () => {
+        const standards = clearConsigneeStd === "all" 
+          ? Object.keys(smsStandards) 
+          : [clearConsigneeStd];
+
+        for (const stdId of standards) {
+          // Clear locally
+          const dispKey = `sms_disp_${stdId}`;
+          const rawDisp = localStorage.getItem(dispKey);
+          if (rawDisp) {
+            try {
+              const entries = JSON.parse(rawDisp);
+              if (Array.isArray(entries)) {
+                const filtered = entries.filter((e: any) => !e.isConsigneeImport);
+                localStorage.setItem(dispKey, JSON.stringify(filtered));
+              }
+            } catch (e) {
+              console.error(`Failed to parse dispatch logs for standard ${stdId}:`, e);
+            }
+          }
+          // Remove legacy import ids tracker if present
+          localStorage.removeItem(`sms_consignee_imported_ids_${stdId}`);
+        }
+
+        // Clear from Cloud (Supabase)
+        if (smsStorage.isCloudEnabled()) {
+          try {
+            let query = supabase.from("sms_dispatch").delete().eq("data->>isConsigneeImport", "true");
+            if (clearConsigneeStd !== "all") {
+              query = query.eq("standard_id", clearConsigneeStd);
+            }
+            const { error } = await query;
+            if (error) console.error("Error clearing consignee sales dispatches from Supabase:", error);
+          } catch (err) {
+            console.error("Error clearing consignee sales dispatches from Supabase:", err);
+          }
+        }
+
+        setConfirmModal(null);
+        alert(`Successfully cleared consignee sales data for ${stdName}.`);
       }
     });
   };
@@ -1639,6 +1729,36 @@ export default function SmsSettings() {
                 >
                   Clear Consignee Data
                 </button>
+              </div>
+
+              {/* Clear Consignee Sales Data Button */}
+              <div className="bg-red-950/10 border border-red-500/20 p-6 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-red-400">Clear Consignee Sales Logs</h4>
+                  <p className="text-xs text-slate-400 leading-relaxed max-w-lg">
+                    Removes imported and generated consignee sales dispatch records locally and from the cloud database.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    value={clearConsigneeStd}
+                    onChange={(e) => setClearConsigneeStd(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-red-500/50"
+                  >
+                    <option value="all">All Standards</option>
+                    {Object.keys(smsStandards).map((stdId) => (
+                      <option key={stdId} value={stdId}>
+                        {smsStandards[stdId].name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleClearConsigneeSalesData}
+                    className="px-5 py-2.5 bg-red-600 hover:bg-red-550 text-white text-xs font-extrabold rounded-xl transition-all shadow-lg shadow-red-500/10 border border-red-500 shrink-0"
+                  >
+                    Clear Sales Data
+                  </button>
+                </div>
               </div>
             </div>
           )}

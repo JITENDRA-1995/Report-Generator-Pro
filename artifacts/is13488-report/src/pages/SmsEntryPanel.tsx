@@ -61,6 +61,7 @@ interface DispatchEntry {
   closePipe?: number;
   prodMtrPipe?: number;
   dispMtrPipe?: number;
+  isConsigneeImport?: boolean;
 }
 
 const MONTHS = [
@@ -156,6 +157,8 @@ export default function SmsEntryPanel() {
   const [prodEntries, setProdEntries] = useState<any[]>([]);
 
   const [dispEntries, setDispEntries] = useState<any[]>([]);
+  const [tempImportedDispEntries, setTempImportedDispEntries] = useState<DispatchEntry[]>([]);
+  const displayedDispEntries = useMemo(() => [...dispEntries, ...tempImportedDispEntries], [dispEntries, tempImportedDispEntries]);
   const prevMonthYear = (month: string, year: string) => {
     const mIdx = MONTHS.indexOf(month);
     if (mIdx === 0) {
@@ -528,9 +531,9 @@ export default function SmsEntryPanel() {
     if (type === "production") {
       setEntries(prodEntries);
     } else {
-      setEntries(dispEntries);
+      setEntries(displayedDispEntries);
     }
-  }, [type, prodEntries, dispEntries]);
+  }, [type, prodEntries, displayedDispEntries]);
 
   const saveFullProductionList = async (list: ProductionEntry[]) => {
     setProdEntries(list);
@@ -2285,7 +2288,7 @@ export default function SmsEntryPanel() {
         const rows = XLSX.utils.sheet_to_json(ws) as any[];
         let importedCount = 0;
         let skippedCount = 0;
-        let newDispEntries = [...dispEntries];
+        const tempEntries: DispatchEntry[] = [];
         const newImportedIds = new Set<string>();
 
         rows.forEach((row) => {
@@ -2319,7 +2322,8 @@ export default function SmsEntryPanel() {
             partyName: partyNameVal || "FARMER",
             billNo: "-",
             batchNo: matchingProd ? dateVal.replace(/-/g, "") : "-",
-            value: qtyVal
+            value: qtyVal,
+            isConsigneeImport: true
           };
 
           if (id === "is13488" || id === "is12786") {
@@ -2339,18 +2343,14 @@ export default function SmsEntryPanel() {
             entry.closePipe = (matchingProd ? matchingProd.pipe : 0) - Math.ceil(qtyVal / 6);
           }
 
-          newDispEntries.push(entry);
+          tempEntries.push(entry);
           newImportedIds.add(entry.id);
           importedCount++;
         });
 
         if (importedCount > 0) {
-          await saveFullDispatchList(newDispEntries);
-          setImportedConsigneeIds(prev => {
-            const merged = new Set([...prev, ...newImportedIds]);
-            localStorage.setItem(`sms_consignee_imported_ids_${id}`, JSON.stringify([...merged]));
-            return merged;
-          });
+          setTempImportedDispEntries(tempEntries);
+          setImportedConsigneeIds(newImportedIds);
         }
 
         setImportStatus({
@@ -2368,18 +2368,16 @@ export default function SmsEntryPanel() {
 
   // Clear all consignee-imported dispatch entries
   const handleClearImportedData = async () => {
-    if (importedConsigneeIds.size === 0) {
+    if (tempImportedDispEntries.length === 0) {
       alert("No imported consignee data to clear.");
       return;
     }
     const confirmed = window.confirm(
-      `This will remove ${importedConsigneeIds.size} imported dispatch entries from the current session. Continue?`
+      `This will remove ${tempImportedDispEntries.length} imported dispatch entries from the current session. Continue?`
     );
     if (!confirmed) return;
 
-    const filtered = dispEntries.filter(e => !importedConsigneeIds.has(e.id));
-    await saveFullDispatchList(filtered);
-    localStorage.removeItem(`sms_consignee_imported_ids_${id}`);
+    setTempImportedDispEntries([]);
     setImportedConsigneeIds(new Set());
     setConsigneeReportRows([]);
     setImportStatus({ type: "success", message: "Imported consignee data cleared successfully." });
@@ -2543,7 +2541,7 @@ export default function SmsEntryPanel() {
     const targetMonthStr = targetMonthIdx < 10 ? `0${targetMonthIdx}` : `${targetMonthIdx}`;
     const targetPrefix = `${consigneeReportYear}-${targetMonthStr}`;
 
-    dispEntries.forEach(entry => {
+    displayedDispEntries.forEach(entry => {
       if (entry.date && entry.date.startsWith(targetPrefix)) {
         const entryParty = String(entry.partyName || "").trim();
         const matchedConsignee = selectedConsignees.find(
@@ -2580,6 +2578,13 @@ export default function SmsEntryPanel() {
       });
       return updated;
     });
+
+    // Finalize/save the temporary imported entries to the persistent database
+    if (tempImportedDispEntries.length > 0) {
+      const merged = [...dispEntries, ...tempImportedDispEntries];
+      saveFullDispatchList(merged);
+      setTempImportedDispEntries([]);
+    }
   };
 
   const performConsigneeExport = () => {
