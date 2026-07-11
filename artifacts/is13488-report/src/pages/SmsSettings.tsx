@@ -296,65 +296,12 @@ export default function SmsSettings() {
   };
 
   const loadConsigneesList = async () => {
-    const defaultsToRemove = new Set([
-      "Jain Irrigation Systems Ltd",
-      "Netafim Irrigation India Pvt Ltd",
-      "GGRC (Gujarat Green Revolution)",
-      "Premier Irrigation Adritec",
-      "Mahindra EPC Irrigation"
-    ]);
-
-    const stored = localStorage.getItem("sms_consignees");
-    const seeded = localStorage.getItem("sms_consignees_seeded_v1");
-
-    let currentList: any[] = [];
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        currentList = parsed.map((c: any) => {
-          if (typeof c === "string") {
-            return { name: c, address: "", country: "India", state: "", district: "", city: "", pincode: "", telephone: "", mobile: "", email: "" };
-          }
-          return {
-            name: c.name || "",
-            address: c.address || "",
-            country: c.country || "India",
-            state: c.state || "",
-            district: c.district || "",
-            city: c.city || "",
-            pincode: c.pincode || "",
-            telephone: c.telephone || "",
-            mobile: c.mobile || "",
-            email: c.email || ""
-          };
-        });
-      } catch (e) {
-        currentList = [];
-      }
-    }
-
-    const cleanedList = currentList.filter((c: any) => !defaultsToRemove.has(c.name));
-    let finalLocalList = cleanedList;
-
-    if (!seeded) {
-      const existingNames = new Set(cleanedList.map(c => c.name.toLowerCase()));
-      const mergedList = [...cleanedList];
-      defaultConsignees.forEach(d => {
-        if (!existingNames.has(d.name.toLowerCase())) {
-          mergedList.push(d);
-        }
-      });
-      localStorage.setItem("sms_consignees", JSON.stringify(mergedList));
-      localStorage.setItem("sms_consignees_seeded_v1", "true");
-      finalLocalList = mergedList;
-    } else {
-      if (cleanedList.length !== currentList.length) {
-        localStorage.setItem("sms_consignees", JSON.stringify(cleanedList));
-      }
-    }
-    setConsigneesList(finalLocalList);
+    // Load local list (combined defaults + custom) first
+    const localList = smsStorage.getLocalConsignees();
+    setConsigneesList(localList);
 
     try {
+      // Sync and retrieve updated list from cloud
       const cloudList = await smsStorage.syncConsigneesFromCloud();
       setConsigneesList(cloudList);
     } catch (err) {
@@ -1847,6 +1794,7 @@ export default function SmsSettings() {
                   <div className="border border-slate-900 rounded-xl overflow-hidden divide-y divide-slate-900/60">
                     {consigneesList.map((item, index) => {
                       const isEditing = editingConsigneeIdx === index;
+                      const isDefault = defaultConsignees.some(d => d.name.toLowerCase() === item.name.toLowerCase());
                       return (
                         <div key={index} className="p-4 bg-slate-900/10 flex flex-col md:flex-row md:items-start justify-between gap-4">
                           <div className="flex-1 space-y-2">
@@ -1962,7 +1910,11 @@ export default function SmsSettings() {
                             )}
                           </div>
                           <div className="flex items-center gap-2">
-                            {isEditing ? (
+                            {isDefault ? (
+                              <span className="text-[9px] bg-slate-900/60 text-slate-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border border-slate-800">
+                                Default
+                              </span>
+                            ) : isEditing ? (
                               <>
                                 <button 
                                   onClick={() => handleSaveConsigneeEdit(index)}

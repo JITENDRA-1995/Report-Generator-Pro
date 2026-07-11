@@ -2385,50 +2385,10 @@ export default function SmsEntryPanel() {
     setImportStatus({ type: "success", message: "Imported consignee data cleared successfully." });
   };
 
-  // Memoized registered consignee names list loaded from localStorage
+  // Memoized registered consignee names list loaded from smsStorage
   const registeredConsignees = useMemo(() => {
-    let registered: string[] = [];
-    const stored = localStorage.getItem("sms_consignees");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        registered = parsed.map((c: any) => {
-          if (typeof c === "string") return c;
-          return c.name || "";
-        }).filter(Boolean);
-      } catch (e) {}
-    }
-
-    const defaultsToRemove = new Set([
-      "Jain Irrigation Systems Ltd",
-      "Netafim Irrigation India Pvt Ltd",
-      "GGRC (Gujarat Green Revolution)",
-      "Premier Irrigation Adritec",
-      "Mahindra EPC Irrigation"
-    ]);
-    let cleaned = registered.filter(name => !defaultsToRemove.has(name));
-
-    const seeded = localStorage.getItem("sms_consignees_seeded_v1");
-    if (!seeded) {
-      const currentObjects = stored ? JSON.parse(stored) : [];
-      const cleanedObjects = currentObjects.filter((c: any) => {
-        const name = typeof c === "string" ? c : c.name || "";
-        return !defaultsToRemove.has(name);
-      });
-      const objectNames = new Set(cleanedObjects.map((c: any) => (typeof c === "string" ? c : c.name || "").toLowerCase()));
-      
-      const mergedObjects = [...cleanedObjects];
-      defaultConsignees.forEach(d => {
-        if (!objectNames.has(d.name.toLowerCase())) {
-          mergedObjects.push(d);
-        }
-      });
-
-      localStorage.setItem("sms_consignees", JSON.stringify(mergedObjects));
-      localStorage.setItem("sms_consignees_seeded_v1", "true");
-      cleaned = mergedObjects.map(c => c.name);
-    }
-    return cleaned;
+    const list = smsStorage.getLocalConsignees();
+    return list.map(c => c.name).filter(Boolean);
   }, [consigneeEditModal]);
 
   // Fast O(1) lookup Map from clean name to original registered name

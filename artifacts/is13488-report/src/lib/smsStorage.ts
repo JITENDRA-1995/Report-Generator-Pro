@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { defaultConsignees } from "./defaultConsignees";
 
 export interface ProductionEntry {
   id: string;
@@ -350,23 +351,35 @@ export async function syncConsigneesFromCloud(): Promise<Consignee[]> {
       synced: true
     }));
 
-    const localConsignees = getLocalConsignees();
-    const cloudIds = new Set(cloudConsignees.map(c => c.id || c.name.toLowerCase()));
+    // Load local custom-only consignees
+    let localCustom: Consignee[] = [];
+    try {
+      const raw = localStorage.getItem("sms_consignees");
+      localCustom = raw ? JSON.parse(raw) : [];
+    } catch {}
+
+    // Filter out any default consignees from cloud and local lists to keep them separate
+    const defaultNames = new Set(defaultConsignees.map(d => d.name.toLowerCase()));
+    const cloudCustom = cloudConsignees.filter(c => !defaultNames.has(c.name.toLowerCase()));
+    const customLocalList = localCustom.filter(c => !defaultNames.has(c.name.toLowerCase()));
+
+    const cloudIds = new Set(cloudCustom.map(c => c.id || c.name.toLowerCase()));
     
-    // Treat as toUpload if explicitly synced === false, or if synced is undefined and not in cloud
-    const toUpload = localConsignees.filter(c => {
+    // Custom local consignees to upload
+    const toUpload = customLocalList.filter(c => {
       if (c.synced === false) return true;
       const identifier = c.id || c.name.toLowerCase();
       if (c.synced === undefined && !cloudIds.has(identifier)) return true;
       return false;
     });
 
-    const merged = [
-      ...cloudConsignees,
+    const mergedCustom = [
+      ...cloudCustom,
       ...toUpload.map(c => ({ ...c, synced: c.synced === undefined ? false : c.synced }))
     ];
 
-    localStorage.setItem("sms_consignees", JSON.stringify(merged));
+    // Save only custom consignees to local storage
+    localStorage.setItem("sms_consignees", JSON.stringify(mergedCustom));
 
     if (toUpload.length > 0) {
       const payload = toUpload.map(c => ({
@@ -377,12 +390,13 @@ export async function syncConsigneesFromCloud(): Promise<Consignee[]> {
       supabase.from("sms_consignees").upsert(payload, { onConflict: "name" }).then(res => {
         if (!res.error) {
           try {
-            const current = getLocalConsignees();
+            const raw = localStorage.getItem("sms_consignees");
+            const current: Consignee[] = raw ? JSON.parse(raw) : [];
             const uploadedIds = new Set(payload.map(p => p.id));
             const updated = current.map(item => uploadedIds.has(item.id || "") ? { ...item, synced: true } : item);
             localStorage.setItem("sms_consignees", JSON.stringify(updated));
           } catch (err) {
-            console.error("Error updating consignees sync status:", err);
+            console.error("Error updating custom consignees sync status:", err);
           }
         } else {
           console.error("Error uploading local consignees:", res.error);
@@ -390,7 +404,9 @@ export async function syncConsigneesFromCloud(): Promise<Consignee[]> {
       });
     }
 
-    return merged;
+    // Return combined defaults + custom list
+    const defaults = defaultConsignees.map(d => ({ ...d, synced: true }));
+    return [...defaults, ...mergedCustom];
   } catch (err) {
     console.error("Failed to sync consignees from cloud:", err);
     return getLocalConsignees();
@@ -398,26 +414,43 @@ export async function syncConsigneesFromCloud(): Promise<Consignee[]> {
 }
 
 export function getLocalConsignees(): Consignee[] {
+  const defaults = defaultConsignees.map(d => ({ ...d, synced: true }));
   try {
     const raw = localStorage.getItem("sms_consignees");
-    return raw ? JSON.parse(raw) : [];
+    const custom = raw ? JSON.parse(raw) : [];
+    // Ensure no duplicates exist by filtering custom list
+    const defaultNames = new Set(defaults.map(d => d.name.toLowerCase()));
+    const filteredCustom = custom.filter((c: any) => !defaultNames.has(c.name.toLowerCase()));
+    return [...defaults, ...filteredCustom];
   } catch {
-    return [];
+    return defaults;
   }
 }
 
 export async function saveConsignee(consignee: Consignee): Promise<void> {
+  const isDefault = defaultConsignees.some(d => d.name.toLowerCase() === consignee.name.toLowerCase());
+  if (isDefault) return; // Prevent saving/overwriting default consignees
+
   const resolvedId = consignee.id || Math.random().toString(36).substring(2, 9);
   const updatedConsignee = { ...consignee, id: resolvedId, synced: false };
   
-  const all = getLocalConsignees();
-  const idx = all.findIndex(c => c.id === resolvedId || c.name.toLowerCase() === consignee.name.toLowerCase());
+  let customList: Consignee[] = [];
+  try {
+    const raw = localStorage.getItem("sms_consignees");
+    customList = raw ? JSON.parse(raw) : [];
+  } catch {}
+  
+  // Ensure no default names are in the custom list
+  const defaultNames = new Set(defaultConsignees.map(d => d.name.toLowerCase()));
+  customList = customList.filter(c => !defaultNames.has(c.name.toLowerCase()));
+
+  const idx = customList.findIndex(c => c.id === resolvedId || c.name.toLowerCase() === consignee.name.toLowerCase());
   if (idx >= 0) {
-    all[idx] = updatedConsignee;
+    customList[idx] = updatedConsignee;
   } else {
-    all.push(updatedConsignee);
+    customList.push(updatedConsignee);
   }
-  localStorage.setItem("sms_consignees", JSON.stringify(all));
+  localStorage.setItem("sms_consignees", JSON.stringify(customList));
 
   if (isCloudEnabled()) {
     try {
@@ -429,7 +462,8 @@ export async function saveConsignee(consignee: Consignee): Promise<void> {
           data: updatedConsignee
         }, { onConflict: "name" });
       if (!error) {
-        const current = getLocalConsignees();
+        const raw = localStorage.getItem("sms_consignees");
+        const current: Consignee[] = raw ? JSON.parse(raw) : [];
         const updated = current.map(c => c.id === resolvedId ? { ...c, synced: true } : c);
         localStorage.setItem("sms_consignees", JSON.stringify(updated));
       } else {
@@ -442,8 +476,17 @@ export async function saveConsignee(consignee: Consignee): Promise<void> {
 }
 
 export async function deleteConsignee(id: string, name: string): Promise<void> {
-  const all = getLocalConsignees().filter(c => c.id !== id && c.name.toLowerCase() !== name.toLowerCase());
-  localStorage.setItem("sms_consignees", JSON.stringify(all));
+  const isDefault = defaultConsignees.some(d => d.name.toLowerCase() === name.toLowerCase());
+  if (isDefault) return; // Prevent deleting default consignees
+
+  let customList: Consignee[] = [];
+  try {
+    const raw = localStorage.getItem("sms_consignees");
+    customList = raw ? JSON.parse(raw) : [];
+  } catch {}
+
+  const filtered = customList.filter(c => c.id !== id && c.name.toLowerCase() !== name.toLowerCase());
+  localStorage.setItem("sms_consignees", JSON.stringify(filtered));
 
   if (isCloudEnabled()) {
     try {
