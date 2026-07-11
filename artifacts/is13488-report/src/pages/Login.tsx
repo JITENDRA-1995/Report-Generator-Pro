@@ -39,7 +39,7 @@ export default function Login() {
 
       toast({
         title: "Welcome back!",
-        description: "Successfully signed in to Report Generator Pro.",
+        description: "Successfully signed in to Inventory & Report Management System (IRMS).",
       });
       navigate("/");
     } catch (error: any) {
@@ -73,7 +73,7 @@ export default function Login() {
             <ParagonLogo />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight text-center">
-            Report Generator Pro
+            Inventory & Report Management System (IRMS)
           </h1>
           <p className="text-slate-400 mt-2 text-sm text-center font-medium">
             Authorized Personnel Only

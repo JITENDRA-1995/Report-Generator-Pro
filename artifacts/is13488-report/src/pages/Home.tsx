@@ -20,7 +20,7 @@ export default function Home() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold mb-4 uppercase tracking-wider">
             Active Standard: {currentStandard.fullName}
           </div>
-          <h1 className="text-4xl font-extrabold text-foreground tracking-tight">Report Generator Pro</h1>
+          <h1 className="text-4xl font-extrabold text-foreground tracking-tight">Inventory & Report Management System (IRMS)</h1>
           <p className="text-muted-foreground mt-2 max-w-xl mx-auto">
             Professional quality test report management system for industrial standards.
           </p>
