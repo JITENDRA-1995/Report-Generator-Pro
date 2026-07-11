@@ -3974,10 +3974,10 @@ export default function SmsEntryPanel() {
                       })}
                   </div>
 
-                  {selectedConsignees.length < 5 && (
+                  {selectedConsignees.length < 3 && (
                     <div className="flex gap-2 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl text-xs">
                       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                      <span>At least 5 consignees are typically needed for BIS portal reports (Selected: {selectedConsignees.length}).</span>
+                      <span>At least 3 consignees are typically needed for BIS portal reports (Selected: {selectedConsignees.length}).</span>
                     </div>
                   )}
 
