@@ -3,6 +3,7 @@
 ## Stability Constraints
 1. **Do Not Touch Verified Standards (IS 13488, IS 13487, IS 4985, IS 17425, IS 12786, IS 14483)**: The mapping logic, schemas, and UI/export components for IS 13488, IS 13487, IS 4985 (uPVC Pipe), IS 17425 (HDPE Pipe), IS 12786 (Plain Laterals), and IS 14483 (Venturi Injector) are verified and perfected. Never touch, modify, or break them under any circumstances without obtaining explicit user confirmation first.
 2. **Double check regex match side-effects**: Always use regex word boundaries (e.g. `\bcl-i\b` and `\bcl-ii\b`) when resolving item classes to avoid substring collisions.
+3. **Browser Login Rule**: If a login page appears while using browser tools, always ask the user to fill in the credentials directly. Do not assume or make false login attempts.
 
 ## IS 4985 uPVC Pipe Business Logic Rules
 1. **Production Import Parsing**:
