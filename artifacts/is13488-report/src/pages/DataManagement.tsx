@@ -726,10 +726,10 @@ function PresetEditor({
       )}
 
       {/* ── Bottom action bar ── */}
-      <div className="sticky bottom-0 z-10 bg-white border-t shadow-md px-4 py-3 flex justify-end gap-2 rounded-b-lg">
-        <Button variant="outline" onClick={onCancel}><X className="w-4 h-4 mr-1" /> Cancel</Button>
-        <Button variant="ghost" onClick={() => setP(preset)}>Reset</Button>
-        <Button onClick={() => onSave(p)}><Save className="w-4 h-4 mr-1" /> Save</Button>
+      <div className="sticky bottom-0 z-10 bg-slate-900 border-t border-slate-800 shadow-md px-4 py-3 flex justify-end gap-2 rounded-b-lg">
+        <Button variant="outline" className="border-slate-800 text-slate-300 hover:text-slate-100 hover:bg-slate-855" onClick={onCancel}><X className="w-4 h-4 mr-1" /> Cancel</Button>
+        <Button variant="ghost" className="text-slate-400 hover:text-slate-200" onClick={() => setP(preset)}>Reset</Button>
+        <Button className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold" onClick={() => onSave(p)}><Save className="w-4 h-4 mr-1" /> Save</Button>
       </div>
     </div>
   );

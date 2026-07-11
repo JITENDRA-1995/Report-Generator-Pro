@@ -384,22 +384,22 @@ export default function SavedReports() {
     };
 
     return (
-      <div className="min-h-screen bg-slate-100/50">
+      <div className="min-h-screen bg-slate-950">
         <HeaderActions>
-          <div className="flex items-center gap-2 pr-4 border-r mr-2">
-            <Button variant="ghost" size="sm" onClick={() => setViewing(null)}>
+          <div className="flex items-center gap-2 pr-4 border-r border-slate-900 mr-2">
+            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200" onClick={() => setViewing(null)}>
               <ArrowLeft className="w-4 h-4 mr-1" />
               Back
             </Button>
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+            <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded">
               {filename}
             </span>
           </div>
-          <Button variant="outline" size="sm" onClick={handlePrint}>
+          <Button variant="outline" size="sm" className="border-slate-800 text-slate-300 hover:text-slate-100 hover:bg-slate-900/50" onClick={handlePrint}>
             <Printer className="w-4 h-4 mr-1" />
             Print
           </Button>
-          <Button size="sm" onClick={handleExport} disabled={isExporting} className="bg-emerald-600 hover:bg-emerald-700">
+          <Button size="sm" onClick={handleExport} disabled={isExporting} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold">
             <Download className="w-4 h-4 mr-1" />
             {isExporting ? 'Generating...' : 'PDF'}
           </Button>
@@ -418,10 +418,10 @@ export default function SavedReports() {
     <div className="container mx-auto py-8 px-4 max-w-4xl pb-32">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <div className="bg-emerald-600 p-2 rounded-lg text-white">
+          <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 p-2 rounded-lg">
             <FileText className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Saved Reports</h1>
+          <h1 className="text-2xl font-bold text-slate-100 tracking-tight">Saved Reports</h1>
         </div>
         <div className="flex gap-2">
           {reports.length > 0 && (
@@ -429,41 +429,41 @@ export default function SavedReports() {
               variant="ghost" 
               size="sm" 
               onClick={toggleSelectAll}
-              className="text-slate-600"
+              className="text-slate-400 hover:text-slate-200"
             >
               {selectedIds.length === reports.length ? <CheckSquare className="w-4 h-4 mr-2" /> : <Square className="w-4 h-4 mr-2" />}
               {selectedIds.length === reports.length ? "Deselect All" : "Select All"}
             </Button>
           )}
-          <Button onClick={() => navigate("/")} variant="outline" size="sm">
+          <Button onClick={() => navigate("/")} variant="outline" className="border-slate-800 text-slate-300 hover:text-slate-100" size="sm">
             Home
           </Button>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <div className="bg-slate-900/30 rounded-xl border border-slate-900 p-6">
         {reports.length === 0 ? (
           <div className="text-center py-12">
-            <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-8 h-8 text-slate-300" />
+            <div className="bg-slate-900/40 border border-slate-800/80 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FileText className="w-8 h-8 text-slate-600" />
             </div>
-            <p className="text-slate-500 font-medium">No reports found.</p>
-            <Button className="mt-4" onClick={() => navigate("/new")}>
+            <p className="text-slate-400 font-medium">No reports found.</p>
+            <Button className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold" onClick={() => navigate("/new")}>
               Create New Report
             </Button>
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="flex flex-col gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+            <div className="flex flex-col gap-4 bg-slate-900/40 p-4 rounded-lg border border-slate-900">
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 min-w-[80px]">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-300 min-w-[80px]">
                   <Filter className="w-4 h-4" /> Filter By:
                 </div>
                 <Select value={filterType} onValueChange={(v) => { setFilterType(v); setSelectedFilters([]); setSelectedMcNoFilters([]); setSelectedSizeFilters([]); }}>
-                  <SelectTrigger className="w-[180px] bg-white border-slate-200">
+                  <SelectTrigger className="w-[180px] bg-slate-950 border-slate-850 text-slate-100">
                     <SelectValue placeholder="Select Category" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-slate-950 border-slate-900 text-slate-100">
                     <SelectItem value="all">All Reports</SelectItem>
                     <SelectItem value="mcNo">M/C No</SelectItem>
                     <SelectItem value="dateOfTest">Date</SelectItem>
@@ -483,7 +483,7 @@ export default function SavedReports() {
                       setSelectedMcNoFilters([]);
                       setSelectedSizeFilters([]);
                     }}
-                    className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 ml-auto"
+                    className="text-emerald-450 hover:text-emerald-300 hover:bg-emerald-500/10 ml-auto"
                   >
                     Clear Filter
                   </Button>
@@ -491,10 +491,10 @@ export default function SavedReports() {
               </div>
 
               {filterType !== "all" && (
-                <div className="space-y-4 pt-2 border-t border-slate-200 mt-2">
+                <div className="space-y-4 pt-4 border-t border-slate-900 mt-2">
                   {/* Category 1: Main Selected Filter Group */}
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">
                       Select {filterType === "dateOfTest" ? "Date" : filterType === "week" ? "Week" : filterType === "month" ? "Month" : filterType === "size" ? "Size" : filterType === "mcNo" ? "M/C No" : "Batch No"}
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -504,8 +504,8 @@ export default function SavedReports() {
                           variant={selectedFilters.includes(val) ? "default" : "outline"}
                           className={`cursor-pointer px-3 py-1 text-xs transition-all ${
                             selectedFilters.includes(val) 
-                              ? "bg-emerald-600 hover:bg-emerald-700 border-emerald-600" 
-                              : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300"
+                              ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400 border-emerald-500 font-bold" 
+                              : "bg-slate-950 hover:bg-slate-900 text-slate-400 border-slate-850"
                           }`}
                           onClick={() => toggleFilter(val)}
                         >
@@ -517,9 +517,9 @@ export default function SavedReports() {
 
                   {/* Category 2: Machine (M/C No) Filter - conditional for Date, Month, Week under IS 13488 */}
                   {["dateOfTest", "month", "week"].includes(filterType) && getCurrentStandard().id === "is13488" && (
-                    <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-150">
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                        <Tag className="w-3 h-3 text-slate-400" /> Filter by Machine (M/C No)
+                    <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-900/50">
+                      <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                        <Tag className="w-3.5 h-3.5 text-slate-500" /> Filter by Machine (M/C No)
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {filterOptions.mcNo.map(val => (
@@ -528,8 +528,8 @@ export default function SavedReports() {
                             variant={selectedMcNoFilters.includes(val) ? "default" : "outline"}
                             className={`cursor-pointer px-3 py-1 text-xs transition-all ${
                               selectedMcNoFilters.includes(val) 
-                                ? "bg-emerald-600 hover:bg-emerald-700 border-emerald-600" 
-                                : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300"
+                                ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400 border-emerald-500 font-bold" 
+                                : "bg-slate-950 hover:bg-slate-900 text-slate-400 border-slate-850"
                             }`}
                             onClick={() => setSelectedMcNoFilters(prev => 
                               prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
@@ -544,9 +544,9 @@ export default function SavedReports() {
 
                   {/* Category 3: Size Filter - conditional for Date, Month, Week under IS 13488 or IS 13487 */}
                   {["dateOfTest", "month", "week"].includes(filterType) && (getCurrentStandard().id === "is13488" || getCurrentStandard().id === "is13487") && (
-                    <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-150">
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                        <Filter className="w-3 h-3 text-slate-400" /> Filter by Size
+                    <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-900/50">
+                      <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                        <Filter className="w-3.5 h-3.5 text-slate-500" /> Filter by Size
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {filterOptions.size.map(val => (
@@ -555,8 +555,8 @@ export default function SavedReports() {
                             variant={selectedSizeFilters.includes(val) ? "default" : "outline"}
                             className={`cursor-pointer px-3 py-1 text-xs transition-all ${
                               selectedSizeFilters.includes(val) 
-                                ? "bg-emerald-600 hover:bg-emerald-700 border-emerald-600" 
-                                : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300"
+                                ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400 border-emerald-500 font-bold" 
+                                : "bg-slate-950 hover:bg-slate-900 text-slate-400 border-slate-850"
                             }`}
                             onClick={() => setSelectedSizeFilters(prev => 
                               prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
@@ -573,65 +573,65 @@ export default function SavedReports() {
             </div>
 
             {filteredReports.length === 0 ? (
-              <div className="text-center py-12 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                <Search className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 font-medium">No reports match the selected filters.</p>
-                <Button variant="ghost" size="sm" onClick={() => { setFilterType("all"); setSelectedFilters([]); setSelectedMcNoFilters([]); setSelectedSizeFilters([]); }} className="mt-2 text-emerald-600">
+              <div className="text-center py-12 bg-slate-900/20 rounded-lg border border-dashed border-slate-850">
+                <Search className="w-8 h-8 text-slate-655 mx-auto mb-3" />
+                <p className="text-slate-400 font-medium">No reports match the selected filters.</p>
+                <Button variant="ghost" size="sm" onClick={() => { setFilterType("all"); setSelectedFilters([]); setSelectedMcNoFilters([]); setSelectedSizeFilters([]); }} className="mt-2 text-emerald-450 hover:text-emerald-350 hover:bg-emerald-500/10">
                   Reset Filters
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
                 {filteredReports.map((r) => (
-              <Card 
-                key={r.id} 
-                className={`p-4 hover:shadow-md transition-all flex items-center justify-between border-slate-200 cursor-pointer ${selectedIds.includes(r.id) ? 'border-emerald-500 bg-emerald-50/30' : ''}`}
-                onClick={() => toggleSelect(r.id)}
-              >
-                <div className="flex items-center gap-4">
-                  <div 
-                    className="flex-shrink-0"
-                    onClick={(e) => { e.stopPropagation(); toggleSelect(r.id); }}
+                  <Card 
+                    key={r.id} 
+                    className={`p-4 hover:shadow-md transition-all flex items-center justify-between border-slate-900 bg-slate-900/20 cursor-pointer hover:border-slate-800 ${selectedIds.includes(r.id) ? 'border-emerald-500 bg-emerald-500/10' : ''}`}
+                    onClick={() => toggleSelect(r.id)}
                   >
-                    <Checkbox checked={selectedIds.includes(r.id)} onCheckedChange={() => toggleSelect(r.id)} />
-                  </div>
-                  <div className="bg-slate-50 p-2 rounded-md border border-slate-100">
-                    <FileText className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-slate-900 leading-tight">
-                      {getReportFilename(r)}
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {r.basicInfo.dateOfTest} • {r.basicInfo.size} • {r.basicInfo.className}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                  <Button variant="ghost" size="icon" onClick={() => setViewing(r)} className="hover:bg-emerald-50 hover:text-emerald-600">
-                    <Eye className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => exportPDF(r)} disabled={downloadingReport?.id === r.id} className="hover:bg-emerald-50 hover:text-emerald-600">
-                    <Download className={`w-4 h-4 ${downloadingReport?.id === r.id ? "animate-bounce text-emerald-600" : ""}`} />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => navigate(`/new?edit=${r.id}`)} className="hover:bg-blue-50 hover:text-blue-600">
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="hover:bg-red-50 hover:text-red-600"
-                    onClick={() => {
-                      if (confirm("Delete this report?")) {
-                        deleteReport(r.id);
-                        setReports(getReports());
-                      }
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </Card>
+                    <div className="flex items-center gap-4">
+                      <div 
+                        className="flex-shrink-0"
+                        onClick={(e) => { e.stopPropagation(); toggleSelect(r.id); }}
+                      >
+                        <Checkbox checked={selectedIds.includes(r.id)} onCheckedChange={() => toggleSelect(r.id)} />
+                      </div>
+                      <div className="bg-slate-950 p-2 rounded-md border border-slate-900">
+                        <FileText className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-100 leading-tight">
+                          {getReportFilename(r)}
+                        </h3>
+                        <p className="text-xs text-slate-450 mt-1">
+                          {r.basicInfo.dateOfTest} • {r.basicInfo.size} • {r.basicInfo.className}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="icon" onClick={() => setViewing(r)} className="text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400">
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => exportPDF(r)} disabled={downloadingReport?.id === r.id} className="text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400">
+                        <Download className={`w-4 h-4 ${downloadingReport?.id === r.id ? "animate-bounce text-emerald-400" : ""}`} />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => navigate(`/new?edit=${r.id}`)} className="text-slate-400 hover:bg-blue-500/10 hover:text-blue-400">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-slate-400 hover:bg-red-500/10 hover:text-red-400"
+                        onClick={() => {
+                          if (confirm("Delete this report?")) {
+                            deleteReport(r.id);
+                            setReports(getReports());
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </Card>
                 ))}
               </div>
             )}
@@ -642,14 +642,14 @@ export default function SavedReports() {
       {/* Batch Actions Bar */}
       {selectedIds.length > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-50">
-          <Card className="bg-slate-900 text-white p-4 shadow-2xl border-none flex items-center justify-between animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <Card className="bg-slate-900 text-slate-100 p-4 shadow-2xl border border-slate-800 flex items-center justify-between animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="flex items-center gap-4">
-              <div className="bg-emerald-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">
+              <div className="bg-emerald-500 text-slate-950 w-8 h-8 rounded-full flex items-center justify-center font-extrabold">
                 {selectedIds.length}
               </div>
               <div>
-                <p className="font-bold text-sm">Reports Selected</p>
-                <p className="text-xs text-slate-400">Perform bulk actions</p>
+                <p className="font-bold text-sm text-slate-100">Reports Selected</p>
+                <p className="text-xs text-slate-450">Perform bulk actions</p>
               </div>
             </div>
             
@@ -657,7 +657,7 @@ export default function SavedReports() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-white hover:bg-slate-800"
+                className="text-slate-300 hover:bg-slate-850 hover:text-slate-100"
                 onClick={() => setSelectedIds([])}
                 disabled={isBatchProcessing}
               >
@@ -672,7 +672,7 @@ export default function SavedReports() {
                 <Trash className="w-4 h-4 mr-2" /> Delete
               </Button>
               <Button 
-                className="bg-emerald-600 hover:bg-emerald-700 text-white" 
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold" 
                 size="sm"
                 onClick={handleBatchDownload}
                 disabled={isBatchProcessing}
@@ -695,13 +695,13 @@ export default function SavedReports() {
 
       {/* Processing Overlay */}
       {isBatchProcessing && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-[60] flex items-center justify-center">
-          <Card className="p-8 max-w-sm w-full text-center">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-[2px] z-[60] flex items-center justify-center">
+          <Card className="p-8 max-w-sm w-full text-center bg-slate-900 border border-slate-850 text-slate-150">
             <div className="relative w-24 h-24 mx-auto mb-6">
               <svg className="w-full h-full" viewBox="0 0 100 100">
-                <circle className="text-slate-100 stroke-current" strokeWidth="8" fill="transparent" r="40" cx="50" cy="50" />
+                <circle className="text-slate-800 stroke-current" strokeWidth="8" fill="transparent" r="40" cx="50" cy="50" />
                 <circle 
-                  className="text-emerald-600 stroke-current transition-all duration-300" 
+                  className="text-emerald-500 stroke-current transition-all duration-300" 
                   strokeWidth="8" 
                   strokeLinecap="round" 
                   fill="transparent" 
@@ -711,12 +711,12 @@ export default function SavedReports() {
                   transform="rotate(-90 50 50)"
                 />
               </svg>
-              <div className="absolute inset-0 flex items-center justify-center text-xl font-bold text-emerald-600">
+              <div className="absolute inset-0 flex items-center justify-center text-xl font-bold text-emerald-400">
                 {Math.round((batchProgress.current / batchProgress.total) * 100)}%
               </div>
             </div>
-            <h3 className="text-xl font-bold mb-2">Downloading Reports</h3>
-            <p className="text-sm text-slate-500">
+            <h3 className="text-xl font-bold mb-2 text-slate-100">Downloading Reports</h3>
+            <p className="text-sm text-slate-400">
               Generating PDF {batchProgress.current} of {batchProgress.total}.<br/>
               This may take a moment...
             </p>
