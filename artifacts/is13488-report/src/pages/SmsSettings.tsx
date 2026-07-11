@@ -141,6 +141,7 @@ export interface ConsigneeDetails {
   telephone?: string;
   mobile?: string;
   email?: string;
+  lookFor?: string;
 }
 
 export default function SmsSettings() {
@@ -162,6 +163,7 @@ export default function SmsSettings() {
   const [newConsigneeTelephone, setNewConsigneeTelephone] = useState<string>("");
   const [newConsigneeMobile, setNewConsigneeMobile] = useState<string>("");
   const [newConsigneeEmail, setNewConsigneeEmail] = useState<string>("");
+  const [newConsigneeLookFor, setNewConsigneeLookFor] = useState<string>("");
 
   const [editingConsigneeIdx, setEditingConsigneeIdx] = useState<number | null>(null);
   const [editingConsigneeVal, setEditingConsigneeVal] = useState<ConsigneeDetails | null>(null);
@@ -337,7 +339,8 @@ export default function SmsSettings() {
       pincode: newConsigneePincode.trim(),
       telephone: newConsigneeTelephone.trim(),
       mobile: newConsigneeMobile.trim(),
-      email: newConsigneeEmail.trim()
+      email: newConsigneeEmail.trim(),
+      lookFor: newConsigneeLookFor.trim()
     };
 
     const updated = [...consigneesList, newConsigneeObj].sort((a, b) => a.name.localeCompare(b.name));
@@ -355,6 +358,7 @@ export default function SmsSettings() {
     setNewConsigneeTelephone("");
     setNewConsigneeMobile("");
     setNewConsigneeEmail("");
+    setNewConsigneeLookFor("");
   };
 
   const handleSaveConsigneeEdit = (index: number) => {
@@ -374,7 +378,8 @@ export default function SmsSettings() {
       pincode: (editingConsigneeVal.pincode || "").trim(),
       telephone: (editingConsigneeVal.telephone || "").trim(),
       mobile: (editingConsigneeVal.mobile || "").trim(),
-      email: (editingConsigneeVal.email || "").trim()
+      email: (editingConsigneeVal.email || "").trim(),
+      lookFor: (editingConsigneeVal.lookFor || "").trim()
     };
 
     updated.sort((a, b) => a.name.localeCompare(b.name));
@@ -1678,6 +1683,18 @@ export default function SmsSettings() {
                     />
                   </div>
 
+                  {/* Look for (Alias) */}
+                  <div className="space-y-1.5 md:col-span-3">
+                    <label className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Look for (Alias for Uploaded Sheets)</label>
+                    <input
+                      type="text"
+                      value={newConsigneeLookFor}
+                      onChange={(e) => setNewConsigneeLookFor(e.target.value)}
+                      placeholder="e.g. Hem / Hariyali Irri - Amirgadh (comma separated for multiple)"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+
                   {/* Address */}
                   <div className="space-y-1.5 md:col-span-3">
                     <label className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Address</label>
@@ -1820,6 +1837,15 @@ export default function SmsSettings() {
                                   />
                                 </div>
                                 <div className="space-y-1.5 md:col-span-3">
+                                  <label className="block text-[9px] text-slate-500 font-bold uppercase">Look for (Alias for Uploaded Sheets)</label>
+                                  <input
+                                    type="text"
+                                    value={editingConsigneeVal.lookFor || ""}
+                                    onChange={(e) => setEditingConsigneeVal({ ...editingConsigneeVal, lookFor: e.target.value })}
+                                    className="w-full bg-slate-950 border border-indigo-500 rounded px-2.5 py-1 text-xs text-slate-200 focus:outline-none"
+                                  />
+                                </div>
+                                <div className="space-y-1.5 md:col-span-3">
                                   <label className="block text-[9px] text-slate-500 font-bold uppercase">Address</label>
                                   <input
                                     type="text"
@@ -1905,6 +1931,7 @@ export default function SmsSettings() {
                                   {item.mobile && <div><strong>Mobile:</strong> {item.mobile}</div>}
                                   {item.email && <div><strong>Email:</strong> {item.email}</div>}
                                   {item.telephone && <div><strong>Phone:</strong> {item.telephone}</div>}
+                                  {item.lookFor && <div className="sm:col-span-2"><strong>Look for (Alias):</strong> {item.lookFor}</div>}
                                 </div>
                               </div>
                             )}

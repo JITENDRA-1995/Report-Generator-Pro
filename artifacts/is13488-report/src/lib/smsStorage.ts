@@ -52,6 +52,7 @@ export interface Consignee {
   telephone?: string;
   mobile?: string;
   email?: string;
+  lookFor?: string;
   synced?: boolean;
   [key: string]: any;
 }

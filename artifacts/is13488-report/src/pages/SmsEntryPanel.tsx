@@ -2394,8 +2394,20 @@ export default function SmsEntryPanel() {
   // Fast O(1) lookup Map from clean name to original registered name
   const cleanToRegisteredMap = useMemo(() => {
     const map = new Map<string, string>();
-    registeredConsignees.forEach(name => {
-      map.set(getCleanConsigneeName(name).toLowerCase(), name);
+    const list = smsStorage.getLocalConsignees();
+    list.forEach(c => {
+      if (c.name) {
+        map.set(getCleanConsigneeName(c.name).toLowerCase(), c.name);
+      }
+      if (c.lookFor) {
+        c.lookFor.split(",").forEach(alias => {
+          const trimmed = alias.trim();
+          if (trimmed) {
+            map.set(getCleanConsigneeName(trimmed).toLowerCase(), c.name);
+            map.set(trimmed.toLowerCase(), c.name);
+          }
+        });
+      }
     });
     return map;
   }, [registeredConsignees]);
@@ -2460,13 +2472,7 @@ export default function SmsEntryPanel() {
 
   // Warning checks for selected consignees
   const getConsigneeWarnings = () => {
-    const stored = localStorage.getItem("sms_consignees");
-    let registeredObjects: any[] = [];
-    if (stored) {
-      try {
-        registeredObjects = JSON.parse(stored);
-      } catch (e) {}
-    }
+    const registeredObjects = smsStorage.getLocalConsignees();
 
     const warnings: { name: string; missing: string[]; obj: any }[] = [];
     selectedConsignees.forEach(name => {
@@ -2579,13 +2585,7 @@ export default function SmsEntryPanel() {
   const performConsigneeExport = () => {
     if (consigneeReportRows.length === 0) return;
 
-    const stored = localStorage.getItem("sms_consignees");
-    let registeredObjects: any[] = [];
-    if (stored) {
-      try {
-        registeredObjects = JSON.parse(stored);
-      } catch (e) {}
-    }
+    const registeredObjects = smsStorage.getLocalConsignees();
 
     const headers = [
       "Brand Name",
@@ -2607,7 +2607,7 @@ export default function SmsEntryPanel() {
     const aoa: any[][] = [headers];
 
     consigneeReportRows.forEach(row => {
-      const obj = registeredObjects.find(r => r && r.name && getCleanConsigneeName(r.name).toLowerCase() === getCleanConsigneeName(row.consigneeName).toLowerCase()) || {};
+      const obj: any = registeredObjects.find(r => r && r.name && getCleanConsigneeName(r.name).toLowerCase() === getCleanConsigneeName(row.consigneeName).toLowerCase()) || {};
 
       aoa.push([
         "PARAGON",

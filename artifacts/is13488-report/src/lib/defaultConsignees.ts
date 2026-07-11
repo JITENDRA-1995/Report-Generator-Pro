@@ -9,6 +9,7 @@ export interface DefaultConsignee {
   telephone: string;
   mobile: string;
   email: string;
+  lookFor?: string;
 }
 
 export const defaultConsignees: DefaultConsignee[] = [
@@ -169,7 +170,7 @@ export const defaultConsignees: DefaultConsignee[] = [
     email: "manubhaijivabhai706@gmail.com"
   },
   {
-    name: "Hem / Hariyali Irri - Amirgadh",
+    name: "Hariyali Irrigation",
     address: "Near Dena Bank, Main Road, Iqbalgadh, Ta. Amirgadh, Dist.Banaskantha",
     country: "India",
     state: "Gujarat",
@@ -178,6 +179,7 @@ export const defaultConsignees: DefaultConsignee[] = [
     pincode: "385135",
     telephone: "-",
     mobile: "7359752570",
-    email: "bakasepa80@gmail.com"
+    email: "bakasepa80@gmail.com",
+    lookFor: "Hem / Hariyali Irri - Amirgadh"
   }
 ];
