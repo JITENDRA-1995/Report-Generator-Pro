@@ -796,9 +796,9 @@ export default function SmsSettings() {
     setConfirmModal({
       show: true,
       title: `Clear ${typeLabel} for ${stdName}?`,
-      message: `CAUTION: This will delete ALL local entries of type "${typeLabel}" for ${stdName}. This operation cannot be undone!`,
+      message: `CAUTION: This will delete ALL local and cloud entries of type "${typeLabel}" for ${stdName}. This operation cannot be undone!`,
       destructive: true,
-      action: () => {
+      action: async () => {
         if (clearType === "stocks" || clearType === "conv") {
           // Remove all starting stocks or conversions matching prefix for this standard
           const keysToRemove: string[] = [];
@@ -809,9 +809,51 @@ export default function SmsSettings() {
             }
           }
           keysToRemove.forEach(k => localStorage.removeItem(k));
+          
+          if (smsStorage.isCloudEnabled()) {
+            try {
+              if (clearType === "stocks") {
+                const { error } = await supabase
+                  .from("sms_starting_stocks")
+                  .delete()
+                  .eq("standard_id", standardId);
+                if (error) console.error("Error clearing starting stocks from Supabase:", error);
+              } else {
+                const { error } = await supabase
+                  .from("sms_conversion_settings")
+                  .delete()
+                  .eq("standard_id", standardId);
+                if (error) console.error("Error clearing conversions from Supabase:", error);
+              }
+            } catch (err) {
+              console.error("Error clearing config from Supabase:", err);
+            }
+          }
         } else {
           // Clear logs
           localStorage.removeItem(storagePrefix);
+          // Also clean up any synced IDs tracker if they exist
+          localStorage.removeItem(`sms_synced_${clearType === "prod" ? "prod" : "disp"}_ids_${standardId}`);
+
+          if (smsStorage.isCloudEnabled()) {
+            try {
+              if (clearType === "prod") {
+                const { error } = await supabase
+                  .from("sms_production")
+                  .delete()
+                  .eq("standard_id", standardId);
+                if (error) console.error("Error clearing production logs from Supabase:", error);
+              } else {
+                const { error } = await supabase
+                  .from("sms_dispatch")
+                  .delete()
+                  .eq("standard_id", standardId);
+                if (error) console.error("Error clearing dispatch logs from Supabase:", error);
+              }
+            } catch (err) {
+              console.error("Error clearing logs from Supabase:", err);
+            }
+          }
         }
         loadOverrides();
         loadConversions();
@@ -821,13 +863,41 @@ export default function SmsSettings() {
     });
   };
 
+  const handleClearConsigneeData = () => {
+    setConfirmModal({
+      show: true,
+      title: "Clear Consignees Directory?",
+      message: "WARNING: This will completely delete all registered consignees from the directory, both locally and from the cloud database. This operation cannot be undone!",
+      destructive: true,
+      action: async () => {
+        localStorage.removeItem("sms_consignees");
+        localStorage.removeItem("sms_synced_consignee_ids");
+        
+        if (smsStorage.isCloudEnabled()) {
+          try {
+            const { error } = await supabase
+              .from("sms_consignees")
+              .delete()
+              .neq("name", "");
+            if (error) console.error("Error clearing consignees from Supabase:", error);
+          } catch (err) {
+            console.error("Error clearing consignees from Supabase:", err);
+          }
+        }
+        
+        setConfirmModal(null);
+        alert("Consignee directory has been cleared.");
+      }
+    });
+  };
+
   const handleClearAllSmsData = () => {
     setConfirmModal({
       show: true,
       title: "WIPE ALL SMS DATA?",
-      message: "WARNING: This will completely delete all Production entries, Dispatch entries, Starting Stocks, Conversions, and Preferences for ALL IS standards. You will lose all logged SMS data! Please proceed with absolute caution.",
+      message: "WARNING: This will completely delete all Production entries, Dispatch entries, Starting Stocks, Conversions, Consignees, and Preferences for ALL IS standards from both local storage and the cloud. You will lose all logged SMS data! Please proceed with absolute caution.",
       destructive: true,
-      action: () => {
+      action: async () => {
         const keysToRemove: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -836,12 +906,30 @@ export default function SmsSettings() {
             key.startsWith("sms_disp_") || 
             key.startsWith("sms_last_stock_") ||
             key.startsWith("sms_stock_") ||
-            key.startsWith("sms_conv_")
+            key.startsWith("sms_conv_") ||
+            key.startsWith("sms_synced_") ||
+            key === "sms_consignees"
           )) {
             keysToRemove.push(key);
           }
         }
         keysToRemove.forEach(k => localStorage.removeItem(k));
+        
+        if (smsStorage.isCloudEnabled()) {
+          try {
+            await Promise.all([
+              supabase.from("sms_production").delete().neq("id", ""),
+              supabase.from("sms_dispatch").delete().neq("id", ""),
+              supabase.from("sms_starting_stocks").delete().neq("id", ""),
+              supabase.from("sms_conversion_settings").delete().neq("id", ""),
+              supabase.from("sms_consignees").delete().neq("name", "")
+            ]);
+            console.log("Cloud databases wiped successfully.");
+          } catch (err) {
+            console.error("Error wiping cloud databases:", err);
+          }
+        }
+
         initializeDefaultConversions(true);
         loadOverrides();
         loadConversions();
@@ -1582,6 +1670,22 @@ export default function SmsSettings() {
                   className="px-5 py-2.5 bg-red-600 hover:bg-red-550 text-white text-xs font-extrabold rounded-xl transition-all shadow-lg shadow-red-500/10 border border-red-500"
                 >
                   Wipe All Data
+                </button>
+              </div>
+
+              {/* Clear Consignee Data Button */}
+              <div className="bg-red-950/10 border border-red-500/20 p-6 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-red-400">Clear Consignee Directory</h4>
+                  <p className="text-xs text-slate-400 leading-relaxed max-w-lg">
+                    Erases the registered consignee directory locally and from the cloud database.
+                  </p>
+                </div>
+                <button
+                  onClick={handleClearConsigneeData}
+                  className="px-5 py-2.5 bg-red-600 hover:bg-red-550 text-white text-xs font-extrabold rounded-xl transition-all shadow-lg shadow-red-500/10 border border-red-500"
+                >
+                  Clear Consignee Data
                 </button>
               </div>
             </div>
