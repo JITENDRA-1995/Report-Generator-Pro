@@ -426,6 +426,9 @@ export function getLocalConsignees(): Consignee[] {
 }
 
 export async function saveConsignee(consignee: Consignee): Promise<void> {
+  const isDefault = defaultConsignees.some(d => d.name.toLowerCase() === consignee.name.toLowerCase());
+  if (isDefault) return; // Prevent saving/overwriting default consignees
+
   const resolvedId = consignee.id || Math.random().toString(36).substring(2, 9);
   const updatedConsignee = { ...consignee, id: resolvedId, synced: false };
   
