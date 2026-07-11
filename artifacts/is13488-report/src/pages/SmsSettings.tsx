@@ -1937,11 +1937,7 @@ export default function SmsSettings() {
                             )}
                           </div>
                           <div className="flex items-center gap-2">
-                            {isDefault ? (
-                              <span className="text-[9px] bg-slate-900/60 text-slate-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border border-slate-800">
-                                Default
-                              </span>
-                            ) : isEditing ? (
+                            {isEditing ? (
                               <>
                                 <button 
                                   onClick={() => handleSaveConsigneeEdit(index)}
@@ -1960,6 +1956,11 @@ export default function SmsSettings() {
                               </>
                             ) : (
                               <>
+                                {isDefault && (
+                                  <span className="text-[9px] bg-slate-900/60 text-slate-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border border-slate-800 mr-1.5">
+                                    Default
+                                  </span>
+                                )}
                                 <button 
                                   onClick={() => {
                                     setEditingConsigneeIdx(index);
@@ -1970,13 +1971,15 @@ export default function SmsSettings() {
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
-                                <button 
-                                  onClick={() => handleDeleteConsignee(item.name)}
-                                  className="p-1.5 hover:bg-red-500/10 rounded text-red-400"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                {!isDefault && (
+                                  <button 
+                                    onClick={() => handleDeleteConsignee(item.name)}
+                                    className="p-1.5 hover:bg-red-500/10 rounded text-red-400"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>
