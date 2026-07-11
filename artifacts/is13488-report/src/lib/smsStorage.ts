@@ -80,12 +80,29 @@ export async function syncProductionFromCloud(standardId: string): Promise<Produ
 
     const localEntries = getLocalProduction(standardId);
     
-    // Merge: Keep all cloud entries, and add local entries not in cloud (then upload them)
+    // Load previously synced production IDs
+    const syncedIdsKey = `sms_synced_prod_ids_${standardId}`;
+    let syncedIds: Set<string>;
+    try {
+      syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+    } catch {
+      syncedIds = new Set<string>();
+    }
+
     const cloudIds = new Set(cloudEntries.map(e => e.id));
-    const toUpload = localEntries.filter(e => !cloudIds.has(e.id));
+    
+    // A local entry is a new/offline entry only if it is not in the cloud AND was never synced in the past
+    const toUpload = localEntries.filter(e => !cloudIds.has(e.id) && !syncedIds.has(e.id));
+    
+    // Merge cloud entries with new/offline local entries.
+    // Local entries that were synced in the past but are missing from cloud are treated as deleted on another device.
     const merged = [...cloudEntries, ...toUpload];
 
     localStorage.setItem(`sms_prod_${standardId}`, JSON.stringify(merged));
+
+    // Update the synced list
+    const newSyncedIds = new Set(merged.map(e => e.id));
+    localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(newSyncedIds)));
 
     // Upload local-only entries in the background
     if (toUpload.length > 0) {
@@ -139,7 +156,17 @@ export async function saveProductionEntry(standardId: string, entry: ProductionE
           data: entry,
           updated_at: new Date().toISOString()
         }, { onConflict: "id" });
-      if (error) console.error("Cloud Save Error (Production):", error);
+      if (error) {
+        console.error("Cloud Save Error (Production):", error);
+      } else {
+        // Track as successfully synced immediately
+        const syncedIdsKey = `sms_synced_prod_ids_${standardId}`;
+        try {
+          const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+          syncedIds.add(entry.id);
+          localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
+        } catch {}
+      }
     } catch (err) {
       console.error("Cloud Save Error (Production):", err);
     }
@@ -149,6 +176,16 @@ export async function saveProductionEntry(standardId: string, entry: ProductionE
 export async function deleteProductionEntry(standardId: string, entryId: string): Promise<void> {
   const all = getLocalProduction(standardId).filter(e => e.id !== entryId);
   localStorage.setItem(`sms_prod_${standardId}`, JSON.stringify(all));
+
+  // Remove from synced IDs list
+  const syncedIdsKey = `sms_synced_prod_ids_${standardId}`;
+  try {
+    const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+    if (syncedIds.has(entryId)) {
+      syncedIds.delete(entryId);
+      localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
+    }
+  } catch {}
 
   if (isCloudEnabled()) {
     try {
@@ -186,11 +223,29 @@ export async function syncDispatchFromCloud(standardId: string): Promise<Dispatc
     }));
 
     const localEntries = getLocalDispatch(standardId);
+    
+    // Load previously synced dispatch IDs
+    const syncedIdsKey = `sms_synced_disp_ids_${standardId}`;
+    let syncedIds: Set<string>;
+    try {
+      syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+    } catch {
+      syncedIds = new Set<string>();
+    }
+
     const cloudIds = new Set(cloudEntries.map(e => e.id));
-    const toUpload = localEntries.filter(e => !cloudIds.has(e.id));
+    
+    // Local entries not in cloud AND never synced before (offline additions)
+    const toUpload = localEntries.filter(e => !cloudIds.has(e.id) && !syncedIds.has(e.id));
+    
+    // Merge cloud entries with new/offline local entries
     const merged = [...cloudEntries, ...toUpload];
 
     localStorage.setItem(`sms_disp_${standardId}`, JSON.stringify(merged));
+
+    // Update synced list
+    const newSyncedIds = new Set(merged.map(e => e.id));
+    localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(newSyncedIds)));
 
     if (toUpload.length > 0) {
       const payload = toUpload.map(e => ({
@@ -249,7 +304,17 @@ export async function saveDispatchEntry(standardId: string, entry: DispatchEntry
           data: entry,
           updated_at: new Date().toISOString()
         }, { onConflict: "id" });
-      if (error) console.error("Cloud Save Error (Dispatch):", error);
+      if (error) {
+        console.error("Cloud Save Error (Dispatch):", error);
+      } else {
+        // Track as successfully synced immediately
+        const syncedIdsKey = `sms_synced_disp_ids_${standardId}`;
+        try {
+          const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+          syncedIds.add(entry.id);
+          localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
+        } catch {}
+      }
     } catch (err) {
       console.error("Cloud Save Error (Dispatch):", err);
     }
@@ -259,6 +324,16 @@ export async function saveDispatchEntry(standardId: string, entry: DispatchEntry
 export async function deleteDispatchEntry(standardId: string, entryId: string): Promise<void> {
   const all = getLocalDispatch(standardId).filter(e => e.id !== entryId);
   localStorage.setItem(`sms_disp_${standardId}`, JSON.stringify(all));
+
+  // Remove from synced IDs list
+  const syncedIdsKey = `sms_synced_disp_ids_${standardId}`;
+  try {
+    const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+    if (syncedIds.has(entryId)) {
+      syncedIds.delete(entryId);
+      localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
+    }
+  } catch {}
 
   if (isCloudEnabled()) {
     try {
@@ -291,13 +366,31 @@ export async function syncConsigneesFromCloud(): Promise<Consignee[]> {
     }));
 
     const localConsignees = getLocalConsignees();
-    const cloudNames = new Set(cloudConsignees.map(c => c.name.toLowerCase()));
     
-    // Add local-only consignees to upload
-    const toUpload = localConsignees.filter(c => !cloudNames.has(c.name.toLowerCase()));
+    // Load previously synced consignee IDs/names
+    const syncedIdsKey = `sms_synced_consignee_ids`;
+    let syncedIds: Set<string>;
+    try {
+      syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+    } catch {
+      syncedIds = new Set<string>();
+    }
+
+    const cloudIds = new Set(cloudConsignees.map(c => c.id || c.name.toLowerCase()));
+    
+    // Local consignees that are not in cloud and have never been synced (offline additions)
+    const toUpload = localConsignees.filter(c => {
+      const identifier = c.id || c.name.toLowerCase();
+      return !cloudIds.has(identifier) && !syncedIds.has(identifier);
+    });
+
     const merged = [...cloudConsignees, ...toUpload];
 
     localStorage.setItem("sms_consignees", JSON.stringify(merged));
+
+    // Update synced list
+    const newSyncedIds = new Set(merged.map(c => c.id || c.name.toLowerCase()));
+    localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(newSyncedIds)));
 
     if (toUpload.length > 0) {
       const payload = toUpload.map(c => ({
@@ -329,10 +422,13 @@ export function getLocalConsignees(): Consignee[] {
 export async function saveConsignee(consignee: Consignee): Promise<void> {
   const all = getLocalConsignees();
   const idx = all.findIndex(c => c.id === consignee.id || c.name.toLowerCase() === consignee.name.toLowerCase());
+  const resolvedId = consignee.id || Math.random().toString(36).substring(2, 9);
+  const updatedConsignee = { ...consignee, id: resolvedId };
+  
   if (idx >= 0) {
-    all[idx] = consignee;
+    all[idx] = updatedConsignee;
   } else {
-    all.push(consignee);
+    all.push(updatedConsignee);
   }
   localStorage.setItem("sms_consignees", JSON.stringify(all));
 
@@ -341,11 +437,21 @@ export async function saveConsignee(consignee: Consignee): Promise<void> {
       const { error } = await supabase
         .from("sms_consignees")
         .upsert({
-          id: consignee.id || Math.random().toString(36).substring(2, 9),
-          name: consignee.name,
-          data: consignee
+          id: resolvedId,
+          name: updatedConsignee.name,
+          data: updatedConsignee
         }, { onConflict: "name" });
-      if (error) console.error("Cloud Save Error (Consignee):", error);
+      if (error) {
+        console.error("Cloud Save Error (Consignee):", error);
+      } else {
+        // Track as synced immediately
+        const syncedIdsKey = `sms_synced_consignee_ids`;
+        try {
+          const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+          syncedIds.add(resolvedId);
+          localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
+        } catch {}
+      }
     } catch (err) {
       console.error("Cloud Save Error (Consignee):", err);
     }
@@ -355,6 +461,17 @@ export async function saveConsignee(consignee: Consignee): Promise<void> {
 export async function deleteConsignee(id: string, name: string): Promise<void> {
   const all = getLocalConsignees().filter(c => c.id !== id && c.name.toLowerCase() !== name.toLowerCase());
   localStorage.setItem("sms_consignees", JSON.stringify(all));
+
+  // Remove from synced list
+  const syncedIdsKey = `sms_synced_consignee_ids`;
+  try {
+    const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+    const identifier = id || name.toLowerCase();
+    if (syncedIds.has(identifier)) {
+      syncedIds.delete(identifier);
+      localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
+    }
+  } catch {}
 
   if (isCloudEnabled()) {
     try {

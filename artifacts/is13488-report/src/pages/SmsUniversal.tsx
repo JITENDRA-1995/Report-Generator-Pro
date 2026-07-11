@@ -9,6 +9,8 @@ import {
   ChevronUp
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { supabase } from "@/lib/supabase";
+import * as smsStorage from "@/lib/smsStorage";
 
 const standardSizes: Record<string, string[]> = {
   is13488: ["12mm Cl-2", "16mm CL-1", "16mm Cl-2", "20mm Cl-1"],
@@ -527,10 +529,44 @@ export default function SmsUniversal() {
           counts[g.standardId]++;
         });
 
-        // Save back updated databases
-        Object.keys(standardUpdates).forEach((stdId) => {
+        // Save back updated databases and upload to cloud if enabled
+        Object.keys(standardUpdates).forEach(async (stdId) => {
           if (counts[stdId] > 0) {
             localStorage.setItem(`sms_disp_${stdId}`, JSON.stringify(standardUpdates[stdId]));
+
+            if (smsStorage.isCloudEnabled()) {
+              const payload = standardUpdates[stdId].map(e => ({
+                id: e.id,
+                standard_id: stdId,
+                date: e.date,
+                size: e.size,
+                party_name: e.partyName,
+                bill_no: e.billNo,
+                batch_no: e.batchNo,
+                data: e,
+                updated_at: new Date().toISOString()
+              }));
+
+              try {
+                const { error } = await supabase
+                  .from("sms_dispatch")
+                  .upsert(payload, { onConflict: "id" });
+                if (error) {
+                  console.error(`Error uploading dispatch entries for ${stdId} during universal import:`, error);
+                } else {
+                  console.log(`Successfully uploaded dispatch entries for ${stdId} to cloud.`);
+                  // Also mark them as synced in the local syncedIds list
+                  const syncedIdsKey = `sms_synced_disp_ids_${stdId}`;
+                  try {
+                    const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
+                    payload.forEach(item => syncedIds.add(item.id));
+                    localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
+                  } catch (e) {}
+                }
+              } catch (err) {
+                console.error(`Failed to upload dispatch entries for ${stdId} during universal import:`, err);
+              }
+            }
           }
         });
 
