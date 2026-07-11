@@ -532,10 +532,12 @@ export default function SmsUniversal() {
         // Save back updated databases and upload to cloud if enabled
         Object.keys(standardUpdates).forEach(async (stdId) => {
           if (counts[stdId] > 0) {
-            localStorage.setItem(`sms_disp_${stdId}`, JSON.stringify(standardUpdates[stdId]));
+            // Mark all imported entries as synced: false initially
+            const updatedList = standardUpdates[stdId].map(e => e.synced === undefined ? { ...e, synced: false } : e);
+            localStorage.setItem(`sms_disp_${stdId}`, JSON.stringify(updatedList));
 
             if (smsStorage.isCloudEnabled()) {
-              const payload = standardUpdates[stdId].map(e => ({
+              const payload = updatedList.map(e => ({
                 id: e.id,
                 standard_id: stdId,
                 date: e.date,
@@ -543,7 +545,7 @@ export default function SmsUniversal() {
                 party_name: e.partyName,
                 bill_no: e.billNo,
                 batch_no: e.batchNo,
-                data: e,
+                data: { ...e, synced: true }, // Save in cloud as synced: true
                 updated_at: new Date().toISOString()
               }));
 
@@ -555,13 +557,11 @@ export default function SmsUniversal() {
                   console.error(`Error uploading dispatch entries for ${stdId} during universal import:`, error);
                 } else {
                   console.log(`Successfully uploaded dispatch entries for ${stdId} to cloud.`);
-                  // Also mark them as synced in the local syncedIds list
-                  const syncedIdsKey = `sms_synced_disp_ids_${stdId}`;
-                  try {
-                    const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-                    payload.forEach(item => syncedIds.add(item.id));
-                    localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
-                  } catch (e) {}
+                  // Mark them as synced: true locally now that cloud save succeeded
+                  const current = JSON.parse(localStorage.getItem(`sms_disp_${stdId}`) || "[]");
+                  const uploadedIds = new Set(payload.map(p => p.id));
+                  const marked = current.map((item: any) => uploadedIds.has(item.id) ? { ...item, synced: true } : item);
+                  localStorage.setItem(`sms_disp_${stdId}`, JSON.stringify(marked));
                 }
               } catch (err) {
                 console.error(`Failed to upload dispatch entries for ${stdId} during universal import:`, err);

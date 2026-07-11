@@ -13,6 +13,7 @@ export interface ProductionEntry {
   nos?: number;
   thousandUnit?: number;
   value: number;
+  synced?: boolean;
 }
 
 export interface DispatchEntry {
@@ -35,6 +36,7 @@ export interface DispatchEntry {
   closePipe?: number;
   prodMtrPipe?: number;
   dispMtrPipe?: number;
+  synced?: boolean;
 }
 
 export interface Consignee {
@@ -49,6 +51,7 @@ export interface Consignee {
   telephone?: string;
   mobile?: string;
   email?: string;
+  synced?: boolean;
   [key: string]: any;
 }
 
@@ -75,46 +78,45 @@ export async function syncProductionFromCloud(standardId: string): Promise<Produ
       ...row.data,
       id: row.id,
       date: row.date,
-      size: row.size
+      size: row.size,
+      synced: true
     }));
 
     const localEntries = getLocalProduction(standardId);
     
-    // Load previously synced production IDs
-    const syncedIdsKey = `sms_synced_prod_ids_${standardId}`;
-    let syncedIds: Set<string>;
-    try {
-      syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-    } catch {
-      syncedIds = new Set<string>();
-    }
-
-    const cloudIds = new Set(cloudEntries.map(e => e.id));
+    // A local entry is toUpload if it is explicitly marked as synced: false.
+    // For backward compatibility, if synced is undefined, we treat it as synced if it's already in the cloud,
+    // otherwise we treat it as synced: true (already deleted on other device) to avoid delete-restore.
+    const toUpload = localEntries.filter(e => e.synced === false);
     
-    // A local entry is a new/offline entry only if it is not in the cloud AND was never synced in the past
-    const toUpload = localEntries.filter(e => !cloudIds.has(e.id) && !syncedIds.has(e.id));
-    
-    // Merge cloud entries with new/offline local entries.
-    // Local entries that were synced in the past but are missing from cloud are treated as deleted on another device.
-    const merged = [...cloudEntries, ...toUpload];
+    const merged = [
+      ...cloudEntries,
+      ...toUpload
+    ];
 
     localStorage.setItem(`sms_prod_${standardId}`, JSON.stringify(merged));
 
-    // Update the synced list
-    const newSyncedIds = new Set(merged.map(e => e.id));
-    localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(newSyncedIds)));
-
-    // Upload local-only entries in the background
     if (toUpload.length > 0) {
       const payload = toUpload.map(e => ({
         id: e.id,
         standard_id: standardId,
         date: e.date,
         size: e.size,
-        data: e
+        data: { ...e, synced: true }
       }));
       supabase.from("sms_production").upsert(payload).then(res => {
-        if (res.error) console.error("Error uploading local production entries:", res.error);
+        if (!res.error) {
+          try {
+            const current = getLocalProduction(standardId);
+            const uploadedIds = new Set(payload.map(p => p.id));
+            const updated = current.map(item => uploadedIds.has(item.id) ? { ...item, synced: true } : item);
+            localStorage.setItem(`sms_prod_${standardId}`, JSON.stringify(updated));
+          } catch (e) {
+            console.error("Error updating production sync status:", e);
+          }
+        } else {
+          console.error("Error uploading local production entries:", res.error);
+        }
       });
     }
 
@@ -135,12 +137,13 @@ export function getLocalProduction(standardId: string): ProductionEntry[] {
 }
 
 export async function saveProductionEntry(standardId: string, entry: ProductionEntry): Promise<void> {
+  const entryWithSync = { ...entry, synced: false };
   const all = getLocalProduction(standardId);
   const idx = all.findIndex(e => e.id === entry.id || (e.date === entry.date && e.size === entry.size));
   if (idx >= 0) {
-    all[idx] = entry;
+    all[idx] = entryWithSync;
   } else {
-    all.unshift(entry);
+    all.unshift(entryWithSync);
   }
   localStorage.setItem(`sms_prod_${standardId}`, JSON.stringify(all));
 
@@ -153,19 +156,15 @@ export async function saveProductionEntry(standardId: string, entry: ProductionE
           standard_id: standardId,
           date: entry.date,
           size: entry.size,
-          data: entry,
+          data: entryWithSync,
           updated_at: new Date().toISOString()
         }, { onConflict: "id" });
-      if (error) {
-        console.error("Cloud Save Error (Production):", error);
+      if (!error) {
+        const current = getLocalProduction(standardId);
+        const updated = current.map(e => e.id === entry.id ? { ...e, synced: true } : e);
+        localStorage.setItem(`sms_prod_${standardId}`, JSON.stringify(updated));
       } else {
-        // Track as successfully synced immediately
-        const syncedIdsKey = `sms_synced_prod_ids_${standardId}`;
-        try {
-          const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-          syncedIds.add(entry.id);
-          localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
-        } catch {}
+        console.error("Cloud Save Error (Production):", error);
       }
     } catch (err) {
       console.error("Cloud Save Error (Production):", err);
@@ -176,16 +175,6 @@ export async function saveProductionEntry(standardId: string, entry: ProductionE
 export async function deleteProductionEntry(standardId: string, entryId: string): Promise<void> {
   const all = getLocalProduction(standardId).filter(e => e.id !== entryId);
   localStorage.setItem(`sms_prod_${standardId}`, JSON.stringify(all));
-
-  // Remove from synced IDs list
-  const syncedIdsKey = `sms_synced_prod_ids_${standardId}`;
-  try {
-    const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-    if (syncedIds.has(entryId)) {
-      syncedIds.delete(entryId);
-      localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
-    }
-  } catch {}
 
   if (isCloudEnabled()) {
     try {
@@ -219,33 +208,30 @@ export async function syncDispatchFromCloud(standardId: string): Promise<Dispatc
       size: row.size,
       partyName: row.party_name,
       billNo: row.bill_no,
-      batchNo: row.batch_no
+      batchNo: row.batch_no,
+      synced: true
     }));
 
     const localEntries = getLocalDispatch(standardId);
-    
-    // Load previously synced dispatch IDs
-    const syncedIdsKey = `sms_synced_disp_ids_${standardId}`;
-    let syncedIds: Set<string>;
-    try {
-      syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-    } catch {
-      syncedIds = new Set<string>();
-    }
-
     const cloudIds = new Set(cloudEntries.map(e => e.id));
     
-    // Local entries not in cloud AND never synced before (offline additions)
-    const toUpload = localEntries.filter(e => !cloudIds.has(e.id) && !syncedIds.has(e.id));
+    // For dispatch, treat it as toUpload if:
+    // 1. Explicitly marked synced: false.
+    // 2. synced is undefined AND missing from cloud AND standardId is "is13488" (to recover import)
+    const toUpload = localEntries.filter(e => {
+      if (e.synced === false) return true;
+      if (e.synced === undefined && !cloudIds.has(e.id) && standardId === "is13488") {
+        return true;
+      }
+      return false;
+    });
     
-    // Merge cloud entries with new/offline local entries
-    const merged = [...cloudEntries, ...toUpload];
+    const merged = [
+      ...cloudEntries,
+      ...toUpload.map(e => ({ ...e, synced: e.synced === undefined ? false : e.synced }))
+    ];
 
     localStorage.setItem(`sms_disp_${standardId}`, JSON.stringify(merged));
-
-    // Update synced list
-    const newSyncedIds = new Set(merged.map(e => e.id));
-    localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(newSyncedIds)));
 
     if (toUpload.length > 0) {
       const payload = toUpload.map(e => ({
@@ -256,10 +242,21 @@ export async function syncDispatchFromCloud(standardId: string): Promise<Dispatc
         party_name: e.partyName,
         bill_no: e.billNo,
         batch_no: e.batchNo,
-        data: e
+        data: { ...e, synced: true }
       }));
       supabase.from("sms_dispatch").upsert(payload).then(res => {
-        if (res.error) console.error("Error uploading local dispatch entries:", res.error);
+        if (!res.error) {
+          try {
+            const current = getLocalDispatch(standardId);
+            const uploadedIds = new Set(payload.map(p => p.id));
+            const updated = current.map(item => uploadedIds.has(item.id) ? { ...item, synced: true } : item);
+            localStorage.setItem(`sms_disp_${standardId}`, JSON.stringify(updated));
+          } catch (err) {
+            console.error("Error updating dispatch sync status:", err);
+          }
+        } else {
+          console.error("Error uploading local dispatch entries:", res.error);
+        }
       });
     }
 
@@ -280,12 +277,13 @@ export function getLocalDispatch(standardId: string): DispatchEntry[] {
 }
 
 export async function saveDispatchEntry(standardId: string, entry: DispatchEntry): Promise<void> {
+  const entryWithSync = { ...entry, synced: false };
   const all = getLocalDispatch(standardId);
   const idx = all.findIndex(e => e.id === entry.id);
   if (idx >= 0) {
-    all[idx] = entry;
+    all[idx] = entryWithSync;
   } else {
-    all.unshift(entry);
+    all.unshift(entryWithSync);
   }
   localStorage.setItem(`sms_disp_${standardId}`, JSON.stringify(all));
 
@@ -301,19 +299,15 @@ export async function saveDispatchEntry(standardId: string, entry: DispatchEntry
           party_name: entry.partyName,
           bill_no: entry.billNo,
           batch_no: entry.batchNo,
-          data: entry,
+          data: entryWithSync,
           updated_at: new Date().toISOString()
         }, { onConflict: "id" });
-      if (error) {
-        console.error("Cloud Save Error (Dispatch):", error);
+      if (!error) {
+        const current = getLocalDispatch(standardId);
+        const updated = current.map(e => e.id === entry.id ? { ...e, synced: true } : e);
+        localStorage.setItem(`sms_disp_${standardId}`, JSON.stringify(updated));
       } else {
-        // Track as successfully synced immediately
-        const syncedIdsKey = `sms_synced_disp_ids_${standardId}`;
-        try {
-          const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-          syncedIds.add(entry.id);
-          localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
-        } catch {}
+        console.error("Cloud Save Error (Dispatch):", error);
       }
     } catch (err) {
       console.error("Cloud Save Error (Dispatch):", err);
@@ -324,16 +318,6 @@ export async function saveDispatchEntry(standardId: string, entry: DispatchEntry
 export async function deleteDispatchEntry(standardId: string, entryId: string): Promise<void> {
   const all = getLocalDispatch(standardId).filter(e => e.id !== entryId);
   localStorage.setItem(`sms_disp_${standardId}`, JSON.stringify(all));
-
-  // Remove from synced IDs list
-  const syncedIdsKey = `sms_synced_disp_ids_${standardId}`;
-  try {
-    const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-    if (syncedIds.has(entryId)) {
-      syncedIds.delete(entryId);
-      localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
-    }
-  } catch {}
 
   if (isCloudEnabled()) {
     try {
@@ -362,44 +346,47 @@ export async function syncConsigneesFromCloud(): Promise<Consignee[]> {
     const cloudConsignees: Consignee[] = (data || []).map(row => ({
       ...row.data,
       id: row.id,
-      name: row.name
+      name: row.name,
+      synced: true
     }));
 
     const localConsignees = getLocalConsignees();
-    
-    // Load previously synced consignee IDs/names
-    const syncedIdsKey = `sms_synced_consignee_ids`;
-    let syncedIds: Set<string>;
-    try {
-      syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-    } catch {
-      syncedIds = new Set<string>();
-    }
-
     const cloudIds = new Set(cloudConsignees.map(c => c.id || c.name.toLowerCase()));
     
-    // Local consignees that are not in cloud and have never been synced (offline additions)
+    // Treat as toUpload if explicitly synced === false, or if synced is undefined and not in cloud
     const toUpload = localConsignees.filter(c => {
+      if (c.synced === false) return true;
       const identifier = c.id || c.name.toLowerCase();
-      return !cloudIds.has(identifier) && !syncedIds.has(identifier);
+      if (c.synced === undefined && !cloudIds.has(identifier)) return true;
+      return false;
     });
 
-    const merged = [...cloudConsignees, ...toUpload];
+    const merged = [
+      ...cloudConsignees,
+      ...toUpload.map(c => ({ ...c, synced: c.synced === undefined ? false : c.synced }))
+    ];
 
     localStorage.setItem("sms_consignees", JSON.stringify(merged));
-
-    // Update synced list
-    const newSyncedIds = new Set(merged.map(c => c.id || c.name.toLowerCase()));
-    localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(newSyncedIds)));
 
     if (toUpload.length > 0) {
       const payload = toUpload.map(c => ({
         id: c.id || Math.random().toString(36).substring(2, 9),
         name: c.name,
-        data: c
+        data: { ...c, synced: true }
       }));
       supabase.from("sms_consignees").upsert(payload, { onConflict: "name" }).then(res => {
-        if (res.error) console.error("Error uploading local consignees:", res.error);
+        if (!res.error) {
+          try {
+            const current = getLocalConsignees();
+            const uploadedIds = new Set(payload.map(p => p.id));
+            const updated = current.map(item => uploadedIds.has(item.id || "") ? { ...item, synced: true } : item);
+            localStorage.setItem("sms_consignees", JSON.stringify(updated));
+          } catch (err) {
+            console.error("Error updating consignees sync status:", err);
+          }
+        } else {
+          console.error("Error uploading local consignees:", res.error);
+        }
       });
     }
 
@@ -420,11 +407,11 @@ export function getLocalConsignees(): Consignee[] {
 }
 
 export async function saveConsignee(consignee: Consignee): Promise<void> {
-  const all = getLocalConsignees();
-  const idx = all.findIndex(c => c.id === consignee.id || c.name.toLowerCase() === consignee.name.toLowerCase());
   const resolvedId = consignee.id || Math.random().toString(36).substring(2, 9);
-  const updatedConsignee = { ...consignee, id: resolvedId };
+  const updatedConsignee = { ...consignee, id: resolvedId, synced: false };
   
+  const all = getLocalConsignees();
+  const idx = all.findIndex(c => c.id === resolvedId || c.name.toLowerCase() === consignee.name.toLowerCase());
   if (idx >= 0) {
     all[idx] = updatedConsignee;
   } else {
@@ -441,16 +428,12 @@ export async function saveConsignee(consignee: Consignee): Promise<void> {
           name: updatedConsignee.name,
           data: updatedConsignee
         }, { onConflict: "name" });
-      if (error) {
-        console.error("Cloud Save Error (Consignee):", error);
+      if (!error) {
+        const current = getLocalConsignees();
+        const updated = current.map(c => c.id === resolvedId ? { ...c, synced: true } : c);
+        localStorage.setItem("sms_consignees", JSON.stringify(updated));
       } else {
-        // Track as synced immediately
-        const syncedIdsKey = `sms_synced_consignee_ids`;
-        try {
-          const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-          syncedIds.add(resolvedId);
-          localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
-        } catch {}
+        console.error("Cloud Save Error (Consignee):", error);
       }
     } catch (err) {
       console.error("Cloud Save Error (Consignee):", err);
@@ -461,17 +444,6 @@ export async function saveConsignee(consignee: Consignee): Promise<void> {
 export async function deleteConsignee(id: string, name: string): Promise<void> {
   const all = getLocalConsignees().filter(c => c.id !== id && c.name.toLowerCase() !== name.toLowerCase());
   localStorage.setItem("sms_consignees", JSON.stringify(all));
-
-  // Remove from synced list
-  const syncedIdsKey = `sms_synced_consignee_ids`;
-  try {
-    const syncedIds = new Set<string>(JSON.parse(localStorage.getItem(syncedIdsKey) || "[]"));
-    const identifier = id || name.toLowerCase();
-    if (syncedIds.has(identifier)) {
-      syncedIds.delete(identifier);
-      localStorage.setItem(syncedIdsKey, JSON.stringify(Array.from(syncedIds)));
-    }
-  } catch {}
 
   if (isCloudEnabled()) {
     try {
