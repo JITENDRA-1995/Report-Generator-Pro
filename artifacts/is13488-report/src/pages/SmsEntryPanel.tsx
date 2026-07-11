@@ -2440,7 +2440,7 @@ export default function SmsEntryPanel() {
   // Master list of all registered and logged consignees (O(N) linear time)
   const allConsignees = useMemo(() => {
     const loggedParties = new Set<string>();
-    dispEntries.forEach(entry => {
+    displayedDispEntries.forEach(entry => {
       const p = String(entry.partyName || "").trim();
       if (p && p !== "-" && p !== "FARMER") {
         const cleanP = getCleanConsigneeName(p).toLowerCase();
@@ -2451,7 +2451,7 @@ export default function SmsEntryPanel() {
 
     const merged = Array.from(new Set([...registeredConsignees, ...Array.from(loggedParties)]));
     return merged.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-  }, [registeredConsignees, dispEntries, cleanToRegisteredMap]);
+  }, [registeredConsignees, displayedDispEntries, cleanToRegisteredMap]);
 
   // Consignees that have at least one dispatch in the selected month+year
   const activeConsignees = useMemo(() => {
@@ -2460,7 +2460,7 @@ export default function SmsEntryPanel() {
     const targetPrefix = `${consigneeReportYear}-${targetMonthStr}`;
 
     const partiesInPeriod = new Set<string>();
-    dispEntries.forEach(entry => {
+    displayedDispEntries.forEach(entry => {
       if (entry.date && entry.date.startsWith(targetPrefix)) {
         const p = String(entry.partyName || "").trim();
         if (p && p !== "-" && p !== "FARMER") {
@@ -2493,7 +2493,7 @@ export default function SmsEntryPanel() {
     }
     return sorted;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allConsignees, dispEntries, consigneeReportMonth, consigneeReportYear, showSavedOnly, cleanToRegisteredMap]);
+  }, [allConsignees, displayedDispEntries, consigneeReportMonth, consigneeReportYear, showSavedOnly, cleanToRegisteredMap]);
 
   // Warning checks for selected consignees
   const getConsigneeWarnings = () => {

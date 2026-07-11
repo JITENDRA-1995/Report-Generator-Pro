@@ -858,17 +858,18 @@ export default function SmsSettings() {
     }
   };
 
-  const handleClearConsigneeSalesData = () => {
-    const stdName = clearConsigneeStd === "all" ? "All Standards" : (smsStandards[clearConsigneeStd]?.name || clearConsigneeStd);
+  const handleClearConsigneeSalesData = (targetStd?: string) => {
+    const stdParam = targetStd || "all";
+    const stdName = stdParam === "all" ? "All Standards" : (smsStandards[stdParam]?.name || stdParam);
     setConfirmModal({
       show: true,
-      title: `Clear Consignee Sales Data for ${stdName}?`,
+      title: `Clear Consignee Sales Logs for ${stdName}?`,
       message: `WARNING: This will permanently delete all imported/generated consignee sales dispatch records for ${stdName} from both local storage and the cloud. This operation cannot be undone!`,
       destructive: true,
       action: async () => {
-        const standards = clearConsigneeStd === "all" 
+        const standards = stdParam === "all" 
           ? Object.keys(smsStandards) 
-          : [clearConsigneeStd];
+          : [stdParam];
 
         for (const stdId of standards) {
           // Clear locally
@@ -921,8 +922,8 @@ export default function SmsSettings() {
         if (smsStorage.isCloudEnabled()) {
           try {
             let query = supabase.from("sms_dispatch").delete().eq("data->>isConsigneeImport", "true");
-            if (clearConsigneeStd !== "all") {
-              query = query.eq("standard_id", clearConsigneeStd);
+            if (stdParam !== "all") {
+              query = query.eq("standard_id", stdParam);
             }
             const { error } = await query;
             if (error) console.error("Error clearing consignee sales dispatches from Supabase:", error);
@@ -932,7 +933,7 @@ export default function SmsSettings() {
         }
 
         setConfirmModal(null);
-        alert(`Successfully cleared consignee sales data for ${stdName}.`);
+        alert(`Successfully cleared consignee sales logs for ${stdName}.`);
       }
     });
   };
@@ -1725,6 +1726,12 @@ export default function SmsSettings() {
                         >
                           Clear Overrides
                         </button>
+                        <button
+                          onClick={() => handleClearConsigneeSalesData(stdId)}
+                          className="px-3 py-1.5 bg-red-550/10 hover:bg-red-550/20 border border-red-500/20 text-red-400 text-xs font-bold rounded-lg transition-all"
+                        >
+                          Clear Sales Logs
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1761,36 +1768,6 @@ export default function SmsSettings() {
                 >
                   Clear Consignee Data
                 </button>
-              </div>
-
-              {/* Clear Consignee Sales Data Button */}
-              <div className="bg-red-950/10 border border-red-500/20 p-6 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="space-y-1">
-                  <h4 className="text-sm font-bold text-red-400">Clear Consignee Sales Logs</h4>
-                  <p className="text-xs text-slate-400 leading-relaxed max-w-lg">
-                    Removes imported and generated consignee sales dispatch records locally and from the cloud database.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <select
-                    value={clearConsigneeStd}
-                    onChange={(e) => setClearConsigneeStd(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-red-500/50"
-                  >
-                    <option value="all">All Standards</option>
-                    {Object.keys(smsStandards).map((stdId) => (
-                      <option key={stdId} value={stdId}>
-                        {smsStandards[stdId].name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={handleClearConsigneeSalesData}
-                    className="px-5 py-2.5 bg-red-600 hover:bg-red-550 text-white text-xs font-extrabold rounded-xl transition-all shadow-lg shadow-red-500/10 border border-red-500 shrink-0"
-                  >
-                    Clear Sales Data
-                  </button>
-                </div>
               </div>
             </div>
           )}
