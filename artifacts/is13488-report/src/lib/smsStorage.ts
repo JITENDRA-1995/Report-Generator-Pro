@@ -58,11 +58,128 @@ export interface Consignee {
   [key: string]: any;
 }
 
+export interface ConsigneeReportRow {
+  id: string;          // e.g. `${standardId}_${consigneeName}_${month}_${year}`
+  standardId: string;
+  consigneeName: string;
+  qty: number;
+  month: string;
+  year: string;
+}
+
 // Helper to check if Supabase is available/configured
 export function isCloudEnabled(): boolean {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
   return !!(url && key);
+}
+
+// ----- CONSIGNEE REPORT ROWS -----
+const CONSIGNEE_REPORT_LOCAL_KEY = "sms_consignee_report_rows";
+
+function getLocalConsigneeReportRows(): ConsigneeReportRow[] {
+  try {
+    const raw = localStorage.getItem(CONSIGNEE_REPORT_LOCAL_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as ConsigneeReportRow[];
+  } catch {
+    return [];
+  }
+}
+
+function setLocalConsigneeReportRows(rows: ConsigneeReportRow[]): void {
+  localStorage.setItem(CONSIGNEE_REPORT_LOCAL_KEY, JSON.stringify(rows));
+}
+
+export async function syncConsigneeReportFromCloud(standardId: string): Promise<ConsigneeReportRow[]> {
+  const local = getLocalConsigneeReportRows().filter(r => r.standardId === standardId);
+  if (!isCloudEnabled()) return local;
+  try {
+    const { data, error } = await supabase
+      .from("sms_consignee_report")
+      .select("*")
+      .eq("standard_id", standardId);
+    if (error) {
+      console.error("Error fetching consignee report rows:", error);
+      return local;
+    }
+    const cloud: ConsigneeReportRow[] = (data || []).map((r: any) => ({
+      id: r.id,
+      standardId: r.standard_id,
+      consigneeName: r.consignee_name,
+      qty: r.qty,
+      month: r.month,
+      year: r.year,
+    }));
+    // Merge: cloud wins, keep local rows not in cloud
+    const cloudIds = new Set(cloud.map(r => r.id));
+    const otherLocal = getLocalConsigneeReportRows().filter(r => r.standardId !== standardId);
+    const merged = [...otherLocal, ...cloud];
+    setLocalConsigneeReportRows(merged);
+    return cloud;
+  } catch (err) {
+    console.error("Sync consignee report failed:", err);
+    return local;
+  }
+}
+
+export async function upsertConsigneeReportRows(standardId: string, rows: ConsigneeReportRow[]): Promise<void> {
+  // Always update local storage
+  const allLocal = getLocalConsigneeReportRows().filter(r => r.standardId !== standardId);
+  setLocalConsigneeReportRows([...allLocal, ...rows]);
+
+  if (!isCloudEnabled()) return;
+  try {
+    const payload = rows.map(r => ({
+      id: r.id,
+      standard_id: r.standardId,
+      consignee_name: r.consigneeName,
+      qty: r.qty,
+      month: r.month,
+      year: r.year,
+      updated_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase
+      .from("sms_consignee_report")
+      .upsert(payload, { onConflict: "id" });
+    if (error) console.error("Error upserting consignee report rows:", error);
+  } catch (err) {
+    console.error("Error upserting consignee report rows:", err);
+  }
+}
+
+export async function deleteConsigneeReportRow(rowId: string): Promise<void> {
+  // Remove from local storage
+  const all = getLocalConsigneeReportRows().filter(r => r.id !== rowId);
+  setLocalConsigneeReportRows(all);
+
+  if (!isCloudEnabled()) return;
+  try {
+    const { error } = await supabase
+      .from("sms_consignee_report")
+      .delete()
+      .eq("id", rowId);
+    if (error) console.error("Error deleting consignee report row:", error);
+  } catch (err) {
+    console.error("Error deleting consignee report row:", err);
+  }
+}
+
+export async function clearConsigneeReportRows(standardId: string): Promise<void> {
+  // Remove from local storage
+  const all = getLocalConsigneeReportRows().filter(r => r.standardId !== standardId);
+  setLocalConsigneeReportRows(all);
+
+  if (!isCloudEnabled()) return;
+  try {
+    const { error } = await supabase
+      .from("sms_consignee_report")
+      .delete()
+      .eq("standard_id", standardId);
+    if (error) console.error("Error clearing consignee report rows:", error);
+  } catch (err) {
+    console.error("Error clearing consignee report rows:", err);
+  }
 }
 
 // ----- SMS PRODUCTION -----

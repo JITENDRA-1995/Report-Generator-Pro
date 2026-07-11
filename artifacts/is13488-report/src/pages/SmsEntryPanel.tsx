@@ -201,8 +201,10 @@ export default function SmsEntryPanel() {
   const [consigneeReportMonth, setConsigneeReportMonth] = useState<string>(() => MONTHS[new Date().getMonth()]);
   const [consigneeReportYear, setConsigneeReportYear] = useState<string>(() => new Date().getFullYear().toString());
   // Each generated row keeps its own month+year so multi-month accumulation works
-  type ConsigneeReportRow = { consigneeName: string; qty: number; month: string; year: string };
+  // id is a stable composite key used for cloud upsert/delete
+  type ConsigneeReportRow = { id: string; consigneeName: string; qty: number; month: string; year: string };
   const [consigneeReportRows, setConsigneeReportRows] = useState<ConsigneeReportRow[]>([]);
+  const [isConsigneeReportLoading, setIsConsigneeReportLoading] = useState(false);
   const [importedConsigneeIds, setImportedConsigneeIds] = useState<Set<string>>(new Set());
 
   const [consigneeEditModal, setConsigneeEditModal] = useState<{
@@ -511,6 +513,25 @@ export default function SmsEntryPanel() {
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [id]);
+
+  // Load persisted consignee report rows from cloud on mount
+  useEffect(() => {
+    if (!id) return;
+    setIsConsigneeReportLoading(true);
+    smsStorage.syncConsigneeReportFromCloud(id).then(rows => {
+      setConsigneeReportRows(rows.map(r => ({
+        id: r.id,
+        consigneeName: r.consigneeName,
+        qty: r.qty,
+        month: r.month,
+        year: r.year,
+      })));
+    }).catch(err => {
+      console.error("Failed to load consignee report rows:", err);
+    }).finally(() => {
+      setIsConsigneeReportLoading(false);
+    });
   }, [id]);
 
   useEffect(() => {
@@ -2594,15 +2615,31 @@ export default function SmsEntryPanel() {
       const updated = [...prev];
       Object.entries(sums).forEach(([name, qty]) => {
         if (qty === 0) return; // skip zero rows
+        // Stable composite key for cloud storage
+        const rowId = `${id}_${name.replace(/\s+/g, "_")}_${consigneeReportMonth}_${consigneeReportYear}`;
         const existingIdx = updated.findIndex(
           r => r.consigneeName === name && r.month === consigneeReportMonth && r.year === consigneeReportYear
         );
         if (existingIdx >= 0) {
           updated[existingIdx] = { ...updated[existingIdx], qty };
         } else {
-          updated.push({ consigneeName: name, qty, month: consigneeReportMonth, year: consigneeReportYear });
+          updated.push({ id: rowId, consigneeName: name, qty, month: consigneeReportMonth, year: consigneeReportYear });
         }
       });
+
+      // Persist updated rows to cloud (fire-and-forget)
+      const rowsToPersist = updated
+        .filter(r => r.id) // only rows with a cloud id
+        .map(r => ({
+          id: r.id,
+          standardId: id!,
+          consigneeName: r.consigneeName,
+          qty: r.qty,
+          month: r.month,
+          year: r.year,
+        }));
+      smsStorage.upsertConsigneeReportRows(id!, rowsToPersist);
+
       return updated;
     });
 
@@ -4075,7 +4112,10 @@ export default function SmsEntryPanel() {
                       />
                       <button
                         type="button"
-                        onClick={() => setConsigneeReportRows([])}
+                        onClick={() => {
+                          setConsigneeReportRows([]);
+                          if (id) smsStorage.clearConsigneeReportRows(id);
+                        }}
                         className="px-3 py-1.5 bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white rounded-lg text-[10px] font-bold transition-all h-8"
                       >
                         Clear All
@@ -4140,7 +4180,11 @@ export default function SmsEntryPanel() {
                                   <button
                                     type="button"
                                     title="Remove this row"
-                                    onClick={() => setConsigneeReportRows(prev => prev.filter((_, i) => i !== idx))}
+                                    onClick={() => {
+                                      const rowToDelete = consigneeReportRows[idx];
+                                      if (rowToDelete?.id) smsStorage.deleteConsigneeReportRow(rowToDelete.id);
+                                      setConsigneeReportRows(prev => prev.filter((_, i) => i !== idx));
+                                    }}
                                     className="p-1.5 bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white rounded-lg transition-all"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
