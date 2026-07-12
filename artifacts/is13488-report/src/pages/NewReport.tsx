@@ -211,11 +211,19 @@ export default function NewReport() {
           return s;
         };
 
+        const getNormalizedName = (str: string): string => {
+          if (!str) return "";
+          let s = str.toLowerCase().replace(/\s+/g, "");
+          s = s.replace(/(\d+\.\d+)/g, (match) => String(parseFloat(match)));
+          return s.replace(/[-_,,]/g, "");
+        };
+
         const generatedReports: ReportData[] = [];
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
           const pName = row["Preset *"];
-          const targetPreset = presets.find((p: Preset) => p.name === pName) || presets[0];
+          const normalizedPName = getNormalizedName(pName);
+          const targetPreset = presets.find((p: Preset) => getNormalizedName(p.name) === normalizedPName) || presets[0];
           const sVal = parseFloat(row["Spacing (cm) *"]);
           const targetSpacing = (!isEmitterBase && targetPreset?.spacings)
             ? (targetPreset.spacings.find((s: any) => s.value === sVal) || targetPreset.spacings[0])
