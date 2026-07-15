@@ -6,8 +6,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   ArrowLeft, Eye, Printer, Trash2, Pencil, Download, FileText, 
   CheckSquare, Square, Trash, Archive, X, CheckCircle2, Search, Filter,
-  ChevronDown, Tag
+  ChevronDown, Tag, FileSpreadsheet
 } from "lucide-react";
+import { exportIS13488Excel } from "@/lib/exportIS13488Excel";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -92,6 +93,7 @@ export default function SavedReports() {
 
   const [downloadingReport, setDownloadingReport] = useState<ReportData | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   
   // Batch selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -282,6 +284,22 @@ export default function SavedReports() {
     }
   };
 
+  // ── IS 13488 Excel export ──────────────────────────────────────────────────
+  const handleExportExcel = (r: ReportData) => {
+    if (isExportingExcel) return;
+    const stdId = r.standardId || getCurrentStandard().id;
+    if (stdId !== "is13488") return;
+    setIsExportingExcel(true);
+    try {
+      exportIS13488Excel(r);
+    } catch (err: any) {
+      console.error("Excel export failed:", err);
+      alert("Failed to generate Excel. Error: " + (err.message || String(err)));
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   const handleBatchDelete = () => {
     if (confirm(`Delete ${selectedIds.length} selected reports? This action cannot be undone.`)) {
       selectedIds.forEach(id => deleteReport(id));
@@ -399,6 +417,18 @@ export default function SavedReports() {
             <Printer className="w-4 h-4 mr-1" />
             Print
           </Button>
+          {(viewing.standardId || getCurrentStandard().id) === "is13488" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-emerald-800/50 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+              onClick={() => handleExportExcel(viewing)}
+              disabled={isExportingExcel}
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-1" />
+              {isExportingExcel ? 'Generating...' : 'Excel'}
+            </Button>
+          )}
           <Button size="sm" onClick={handleExport} disabled={isExporting} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold">
             <Download className="w-4 h-4 mr-1" />
             {isExporting ? 'Generating...' : 'PDF'}
@@ -614,6 +644,11 @@ export default function SavedReports() {
                       <Button variant="ghost" size="icon" onClick={() => exportPDF(r)} disabled={downloadingReport?.id === r.id} className="text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400">
                         <Download className={`w-4 h-4 ${downloadingReport?.id === r.id ? "animate-bounce text-emerald-400" : ""}`} />
                       </Button>
+                      {(r.standardId || getCurrentStandard().id) === "is13488" && (
+                        <Button variant="ghost" size="icon" onClick={() => handleExportExcel(r)} disabled={isExportingExcel} className="text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400" title="Export as Excel">
+                          <FileSpreadsheet className="w-4 h-4" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" onClick={() => navigate(`/new?edit=${r.id}`)} className="text-slate-400 hover:bg-blue-500/10 hover:text-blue-400">
                         <Pencil className="w-4 h-4" />
                       </Button>

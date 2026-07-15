@@ -464,7 +464,7 @@ function Page2({ data }: { data: ReportData }) {
         <tbody>
           <tr>
             <td style={{ width: "50%" }}>Mean Emission Rate (Q) : {fmt(u.meanQ)} LPH</td>
-            <td>Std. deviation of Emission Rate : (Sq) {fmt(u.sq, 4)}</td>
+            <td>Std. deviation of Emission Rate (Sq) : {fmt(u.sq, 4)}</td>
           </tr>
           <tr>
             <td>Declared Emission Rate : {fmt(u.declaredEmissionRate)} LPH</td>

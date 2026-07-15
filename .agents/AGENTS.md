@@ -58,3 +58,6 @@
    - Pre-build a `cleanToRegisteredMap: Map<string, string>` (clean base name → registered name) as a memoized constant and use O(1) Map lookups inside loops.
 3. **Report Aggregation**:
    - When aggregating dispatch quantities for consignee monthwise summary, compare both the selected name and the dispatch `partyName` through `getCleanConsigneeName` to correctly match entries with location suffixes.
+
+## Git Workflow Constraints
+1. **Local Verification Before Push**: Any changes made must be kept local initially. Do not stage, commit, or push changes to the remote git repository until the changes are verified. Once verification is complete, they can be pushed.

@@ -76,6 +76,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
+    "exceljs": "^4.4.0",
     "jszip": "^3.10.1",
     "xlsx": "^0.18.5",
     "xlsx-js-style": "^1.2.0"
