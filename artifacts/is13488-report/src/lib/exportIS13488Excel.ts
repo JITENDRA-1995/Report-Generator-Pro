@@ -417,6 +417,22 @@ function generatePressureChartBase64(finalPressureRows: any[]): string {
 }
 
 // ─── Main export function ──────────────────────────────────────────────────────
+function getExportFilename(data: ReportData): string {
+  const b = data.basicInfo;
+  const mcUpper = (b.mcNo || "").toUpperCase();
+  const mcLetter = mcUpper.includes("FLAT") ? "F" : mcUpper.includes("ROUND") ? "R" : (mcUpper.replace(/[^A-Z]/g, "")[0] || "M");
+  const mcNum = (b.mcNo || "").match(/\d+/)?.[0] || "";
+  const mcAlias = mcLetter + mcNum || "M1";
+
+  const sizeNum = (b.size || "").replace(/[^0-9.]/g, "") || "0";
+  const dischargeNum = String(parseFloat(String(b.discharge || 0)) || 0);
+  const classNum = (b.className || "").replace(/[^0-9]/g, "") || "0";
+  const spacingNum = String(parseFloat(String(data.spacing?.declared || b.spacing || 0)) || 0);
+  const batchClean = (b.batchNo || "").replace(/[^0-9a-zA-Z]/g, "") || "BATCH";
+
+  return `${mcAlias}_${sizeNum}-${dischargeNum}-${classNum}-${spacingNum}_${batchClean}`;
+}
+
 export function exportIS13488Excel(data: ReportData): void {
   const b = data.basicInfo;
   const headingRows = new Set<number>();
@@ -474,7 +490,8 @@ export function exportIS13488Excel(data: ReportData): void {
     base64: PARAGON_LOGO_BASE64,
     extension: "png",
   });
-  const sheetName = [b.mcNo, b.batchNo].filter(Boolean).join("_").substring(0, 31) || "IS13488";
+  const filename = getExportFilename(data);
+  const sheetName = filename.substring(0, 31) || "IS13488";
   const ws = workbook.addWorksheet(sheetName, {
     pageSetup: {
       paperSize: 9, // A4
@@ -1426,7 +1443,6 @@ export function exportIS13488Excel(data: ReportData): void {
   });
 
   // ─── Generate workbook and download ───────────────────────────────────────
-  const filename = [b.mcNo, b.batchNo].filter(Boolean).join("_").replace(/[\/\\?%*:|"<>]/g, "-");
   
   // ─── Final explicit height guarantee for Page 1 header rows ─────────────────
   // Apply AFTER all cell writes and eachRow pass to ensure nothing resets them.
@@ -1440,7 +1456,7 @@ export function exportIS13488Excel(data: ReportData): void {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${filename}_IS13488.xlsx`;
+    link.download = `${filename}.xlsx`;
     link.click();
     URL.revokeObjectURL(url);
   }).catch((err) => {
