@@ -27,7 +27,7 @@ export default function Welcome() {
       <header className="relative z-10 w-full max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-xl font-bold tracking-wider bg-gradient-to-r from-emerald-400 to-indigo-400 bg-clip-text text-transparent">
-            PARAGON INDUSTRIES
+            PARAGON IRRIGATION
           </span>
           <span className="text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 font-medium uppercase tracking-widest">
             Hub
@@ -95,7 +95,7 @@ export default function Welcome() {
                 Stock Management System
               </h2>
               <p className="mt-3 text-slate-400 text-sm leading-relaxed">
-                Track warehouse inventory, manage production stock, and audit raw material storage logs. *(Currently in SMS development)*.
+                Track warehouse inventory, manage production stock, and audit raw material storage logs.
               </p>
             </div>
             <div className="mt-8 flex items-center gap-2 text-indigo-400 font-semibold text-sm group-hover:translate-x-2 transition-transform duration-300">
@@ -108,7 +108,7 @@ export default function Welcome() {
 
       {/* Footer */}
       <footer className="relative z-10 w-full py-6 text-center text-xs text-slate-600 border-t border-slate-900">
-        &copy; {new Date().getFullYear()} Paragon Industries. All rights reserved.
+        &copy; {new Date().getFullYear()} Paragon Irrigation. All rights reserved.
       </footer>
     </div>
   );
