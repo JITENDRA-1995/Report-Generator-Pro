@@ -6,9 +6,16 @@ import {
   AlertTriangle, 
   X, 
   ChevronDown, 
-  ChevronUp
+  ChevronUp,
+  FileSpreadsheet,
+  Eye,
+  Table,
+  Info,
+  Sparkles,
+  HelpCircle
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import XLSXStyle from "xlsx-js-style";
 import { supabase } from "@/lib/supabase";
 import * as smsStorage from "@/lib/smsStorage";
 
@@ -206,6 +213,7 @@ export default function SmsUniversal() {
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [skippedRows, setSkippedRows] = useState<{ index: number; itemName: string; reason: string }[]>([]);
   const [showSkippedModal, setShowSkippedModal] = useState<boolean>(false);
+  const [showTemplatePreview, setShowTemplatePreview] = useState<boolean>(false);
 
   // Export states
   const [exportStandards, setExportStandards] = useState<string[]>([
@@ -595,6 +603,80 @@ export default function SmsUniversal() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  // Helper to apply clean Excel Table styling (header fill, bold font, borders, and autofilter)
+  const applyWorksheetTableStyle = (ws: any, _isBlankHeaderOnly: boolean = false) => {
+    if (!ws || !ws["!ref"]) return;
+
+    const thinBorder = {
+      top: { style: "thin", color: { rgb: "D9D9D9" } },
+      bottom: { style: "thin", color: { rgb: "D9D9D9" } },
+      left: { style: "thin", color: { rgb: "D9D9D9" } },
+      right: { style: "thin", color: { rgb: "D9D9D9" } }
+    };
+
+    const headerStyle = {
+      font: { name: "Arial", size: 10, bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "366092" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: thinBorder
+    };
+
+    const dataStyle = {
+      font: { name: "Arial", size: 10 },
+      alignment: { horizontal: "left", vertical: "center" },
+      border: thinBorder
+    };
+
+    const numStyle = {
+      font: { name: "Arial", size: 10 },
+      alignment: { horizontal: "right", vertical: "center" },
+      border: thinBorder
+    };
+
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+
+    // Set !autofilter for native Excel Table filtering dropdowns
+    ws["!autofilter"] = { ref: ws["!ref"] };
+
+    // Calculate dynamic column widths if not already explicitly provided on ws["!cols"]
+    if (!ws["!cols"]) {
+      const cols: any[] = [];
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        let maxLen = 12;
+        for (let r = range.s.r; r <= range.e.r; r++) {
+          const cellRef = XLSX.utils.encode_cell({ r, c });
+          if (ws[cellRef] && ws[cellRef].v !== undefined && ws[cellRef].v !== null) {
+            const str = String(ws[cellRef].v);
+            if (str.length > maxLen) maxLen = str.length;
+          }
+        }
+        cols.push({ wch: Math.min(maxLen + 4, 45) });
+      }
+      ws["!cols"] = cols;
+    }
+
+    // Apply cell styling to every cell inside table boundary
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        if (!ws[cellRef]) continue;
+
+        if (r === range.s.r) {
+          // Header Row gets vibrant Navy box with white bold font
+          ws[cellRef].s = headerStyle;
+        } else {
+          // Data Row gets clean thin border & numeric/text alignment
+          const val = ws[cellRef].v;
+          if (typeof val === "number" || (!isNaN(Number(val)) && typeof val === "string" && val.trim() !== "" && /^[0-9.]+$/.test(val))) {
+            ws[cellRef].s = numStyle;
+          } else {
+            ws[cellRef].s = dataStyle;
+          }
+        }
+      }
+    }
+  };
+
   // Process Universal Export
   const handleExportExcel = () => {
     if (exportStandards.length === 0) {
@@ -631,6 +713,7 @@ export default function SmsUniversal() {
               "Value": e.value || 0
             }));
             const ws = XLSX.utils.json_to_sheet(rows);
+            applyWorksheetTableStyle(ws, false);
             const sheetName = getSafeSheetName("Prod", stdId, sz);
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
             hasSheets = true;
@@ -697,6 +780,7 @@ export default function SmsUniversal() {
               };
             });
             const ws = XLSX.utils.json_to_sheet(rows);
+            applyWorksheetTableStyle(ws, false);
             const sheetName = getSafeSheetName("Disp", stdId, sz);
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
             hasSheets = true;
@@ -712,6 +796,7 @@ export default function SmsUniversal() {
               "Date": formatDateToDMY(r.Date)
             }));
             const ws = XLSX.utils.json_to_sheet(formattedRows);
+            applyWorksheetTableStyle(ws, false);
             const sheetName = getSafeSheetName("Stock", stdId, sz);
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
             hasSheets = true;
@@ -725,7 +810,7 @@ export default function SmsUniversal() {
       return;
     }
 
-    XLSX.writeFile(wb, `SMS_Universal_Inventory_Report.xlsx`);
+    XLSXStyle.writeFile(wb, `SMS_Universal_Inventory_Report.xlsx`);
   };
 
   const handleStandardToggle = (stdId: string) => {
@@ -753,6 +838,29 @@ export default function SmsUniversal() {
       ...prev,
       [stdId]: isAllSelected ? [] : [...allSizes]
     }));
+  };
+
+  // Standard Import File Template Generator & Downloader (Initially blank, headers only)
+  const handleDownloadTemplate = () => {
+    const headers = ["Party Name", "Item Name", "Date", "Qty", "Bill No", "MIS Type", "Remarks"];
+    const ws = XLSX.utils.json_to_sheet([], { header: headers });
+    
+    // Set column widths for better readability when opened in Excel
+    ws["!cols"] = [
+      { wch: 24 }, // Party Name
+      { wch: 32 }, // Item Name
+      { wch: 14 }, // Date
+      { wch: 10 }, // Qty
+      { wch: 14 }, // Bill No
+      { wch: 12 }, // MIS Type
+      { wch: 60 }  // Remarks
+    ];
+
+    applyWorksheetTableStyle(ws, true);
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Master_Import_Template");
+    XLSXStyle.writeFile(wb, "SMS_Master_Import_Template.xlsx");
   };
 
   return (
@@ -844,8 +952,8 @@ export default function SmsUniversal() {
           <div className="relative z-10">
             {activeTab === "import" ? (
               <div className="grid lg:grid-cols-3 gap-8">
-                {/* Drag-and-drop zone */}
-                <div className="lg:col-span-2 space-y-4">
+                {/* Drag-and-drop zone + Standard Template Section */}
+                <div className="lg:col-span-2 space-y-6">
                   <div 
                     onClick={() => fileInputRef.current?.click()}
                     className="border-2 border-dashed border-slate-900 hover:border-indigo-500/40 bg-slate-950/40 hover:bg-slate-950/80 rounded-2xl p-12 text-center transition-all duration-300 cursor-pointer flex flex-col items-center justify-center min-h-[260px] group"
@@ -866,6 +974,48 @@ export default function SmsUniversal() {
                     <p className="text-[10px] text-slate-500 mt-2 font-medium">
                       Supports .xlsx, .xls formats (Maximum size 10MB)
                     </p>
+                  </div>
+
+                  {/* Standard Import File Template Card */}
+                  <div className="bg-gradient-to-br from-slate-950/90 via-slate-900/70 to-slate-950/90 border border-slate-800/80 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+                    
+                    <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                      <div className="space-y-2 max-w-xl">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                            <FileSpreadsheet className="w-5 h-5" />
+                          </div>
+                          <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
+                            Standard Template Ready
+                          </span>
+                        </div>
+                        <h4 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                          Master Sales Excel Template (.xlsx)
+                        </h4>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                          Ensure 100% accurate auto-classification across all 6 IS Standards. Use our official layout with pre-configured headers (<strong className="text-slate-300 font-semibold">Party Name, Item Name, Date, Qty, Bill No, MIS Type, Remarks</strong>) ready for clean data entry without demo clutter.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                        <button
+                          onClick={() => setShowTemplatePreview(true)}
+                          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/80 hover:bg-slate-900 text-slate-300 hover:text-white text-xs font-bold transition-all duration-200 shadow-sm cursor-pointer"
+                        >
+                          <Eye className="w-4 h-4 text-indigo-400" />
+                          <span>Preview Template</span>
+                        </button>
+
+                        <button
+                          onClick={handleDownloadTemplate}
+                          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-bold transition-all duration-200 shadow-lg shadow-indigo-600/25 cursor-pointer"
+                        >
+                          <Download className="w-4 h-4" />
+                          <span>Download (.xlsx)</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1086,6 +1236,216 @@ export default function SmsUniversal() {
               >
                 Close Summary
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Standard Import Template Preview Modal */}
+      {showTemplatePreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-6 bg-slate-950/80 border-b border-slate-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                  <Table className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-100 flex items-center gap-2">
+                    Standard Master Import Template Preview
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                      Auto-Parser Verified
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Review the exact column layout and real-world sample entries before downloading your template.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowTemplatePreview(false)}
+                className="text-slate-400 hover:text-slate-200 transition-colors p-2 rounded-xl hover:bg-slate-800/60"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              {/* Column Rules Guide Grid */}
+              <div>
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+                  <Info className="w-4 h-4 text-indigo-400" />
+                  Expected Column Specifications
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="bg-slate-950/50 border border-slate-850 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-indigo-400">Party Name</span>
+                      <span className="text-[9px] font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">Optional</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-normal">
+                      Buyer / Consignee name (e.g. Kisan Agro). Defaults to FARMER if blank.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950/50 border border-slate-850 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-emerald-400">Item Name</span>
+                      <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">Required</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-normal">
+                      Full product string or size matching IS standard (e.g. <span className="font-mono text-slate-300">16mm CL-1 Emitting Pipe</span>).
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950/50 border border-slate-850 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-emerald-400">Date & Qty</span>
+                      <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">Required</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-normal">
+                      Date in <span className="font-mono text-slate-300">DD/MM/YYYY</span> or Excel date. Qty in meters/numbers per standard rules.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950/50 border border-slate-850 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-emerald-400">Bill No & MIS</span>
+                      <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">Required</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-normal">
+                      Invoice number (<span className="font-mono text-slate-300">INV-1001</span>) and MIS category (<span className="font-mono text-slate-300">GST / NON-GST</span>).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sample Data Table */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    Sample Data Preview (6 Standard Examples Included)
+                  </h4>
+                  <span className="text-[11px] text-slate-500 font-medium italic">
+                    All 7 columns match exact parser expectations
+                  </span>
+                </div>
+
+                <div className="border border-slate-800 rounded-2xl overflow-hidden shadow-inner bg-slate-950/60">
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 font-extrabold text-[11px] uppercase tracking-wider">
+                          <th className="py-3.5 px-4 font-bold text-indigo-300">Party Name</th>
+                          <th className="py-3.5 px-4 font-bold text-indigo-300">Item Name</th>
+                          <th className="py-3.5 px-4 font-bold text-indigo-300">Date</th>
+                          <th className="py-3.5 px-4 font-bold text-indigo-300 text-right">Qty</th>
+                          <th className="py-3.5 px-4 font-bold text-indigo-300">Bill No</th>
+                          <th className="py-3.5 px-4 font-bold text-indigo-300">MIS Type</th>
+                          <th className="py-3.5 px-4 font-bold text-indigo-300">Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-850 text-slate-300 font-medium">
+                        <tr className="hover:bg-slate-900/50 transition-colors">
+                          <td className="py-3 px-4 text-slate-300">Kisan Agro Kendra</td>
+                          <td className="py-3 px-4 font-bold text-emerald-400">16mm CL-1 Emitting Pipe</td>
+                          <td className="py-3 px-4 text-slate-400 font-mono">15/07/2026</td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-100">1,000</td>
+                          <td className="py-3 px-4 font-mono text-indigo-400">INV-1001</td>
+                          <td className="py-3 px-4"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">GST</span></td>
+                          <td className="py-3 px-4 text-slate-400 text-[11px] italic">Drip irrigation dispatch (Qty in meters)</td>
+                        </tr>
+                        <tr className="hover:bg-slate-900/50 transition-colors">
+                          <td className="py-3 px-4 text-slate-300">Patel Farm Supplies</td>
+                          <td className="py-3 px-4 font-bold text-emerald-400">20mm Cl-1 Plain Lateral</td>
+                          <td className="py-3 px-4 text-slate-400 font-mono">15/07/2026</td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-100">500</td>
+                          <td className="py-3 px-4 font-mono text-indigo-400">INV-1002</td>
+                          <td className="py-3 px-4"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">GST</span></td>
+                          <td className="py-3 px-4 text-slate-400 text-[11px] italic">Plain lateral roll (Qty in meters)</td>
+                        </tr>
+                        <tr className="hover:bg-slate-900/50 transition-colors">
+                          <td className="py-3 px-4 text-slate-300">Shreeji Enterprises</td>
+                          <td className="py-3 px-4 font-bold text-emerald-400">4 LPH Dripper</td>
+                          <td className="py-3 px-4 text-slate-400 font-mono">16/07/2026</td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-100">2,500</td>
+                          <td className="py-3 px-4 font-mono text-indigo-400">INV-1003</td>
+                          <td className="py-3 px-4"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">NON-GST</span></td>
+                          <td className="py-3 px-4 text-slate-400 text-[11px] italic">Online drippers (Qty in numbers)</td>
+                        </tr>
+                        <tr className="hover:bg-slate-900/50 transition-colors">
+                          <td className="py-3 px-4 text-slate-300">Green Earth Irrigation</td>
+                          <td className="py-3 px-4 font-bold text-emerald-400">63mm Cl-2 R.PVC Pipe</td>
+                          <td className="py-3 px-4 text-slate-400 font-mono">16/07/2026</td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-100">600</td>
+                          <td className="py-3 px-4 font-mono text-indigo-400">INV-1004</td>
+                          <td className="py-3 px-4"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">GST</span></td>
+                          <td className="py-3 px-4 text-slate-400 text-[11px] italic">Rigid PVC 63mm (Qty in meters, auto-calculated to 100 pipes)</td>
+                        </tr>
+                        <tr className="hover:bg-slate-900/50 transition-colors">
+                          <td className="py-3 px-4 text-slate-300">Sardar Patel Farms</td>
+                          <td className="py-3 px-4 font-bold text-emerald-400">75mm Cl-1 HDPE Sprinkler</td>
+                          <td className="py-3 px-4 text-slate-400 font-mono">17/07/2026</td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-100">150</td>
+                          <td className="py-3 px-4 font-mono text-indigo-400">INV-1005</td>
+                          <td className="py-3 px-4"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">GST</span></td>
+                          <td className="py-3 px-4 text-slate-400 text-[11px] italic">HDPE pipes (Qty in numbers/pipes)</td>
+                        </tr>
+                        <tr className="hover:bg-slate-900/50 transition-colors">
+                          <td className="py-3 px-4 text-slate-300">Narmada Traders</td>
+                          <td className="py-3 px-4 font-bold text-emerald-400">V-1" (25mm) Venturi Injector</td>
+                          <td className="py-3 px-4 text-slate-400 font-mono">17/07/2026</td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-100">10</td>
+                          <td className="py-3 px-4 font-mono text-indigo-400">INV-1006</td>
+                          <td className="py-3 px-4"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">RETAIL</span></td>
+                          <td className="py-3 px-4 text-slate-400 text-[11px] italic">Venturi 1 inch (Qty in numbers)</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Parser Pro-Tips Box */}
+              <div className="bg-indigo-950/30 border border-indigo-500/20 rounded-2xl p-4 flex items-start gap-3.5">
+                <HelpCircle className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <h5 className="font-extrabold text-indigo-300">Auto-Parser Pro Tips</h5>
+                  <p className="text-slate-300 leading-relaxed text-[11px]">
+                    • <strong className="text-white">IS 4985 (Rigid PVC)</strong> quantities should be entered in <strong className="text-indigo-300">Meters</strong>. The universal parser automatically converts them into pipe counts (`Qty / 6`).<br/>
+                    • <strong className="text-white">Date Format</strong>: The parser supports `DD/MM/YYYY`, `YYYY-MM-DD`, standard Excel serial numbers, and `DD/Mon/YYYY`.<br/>
+                    • <strong className="text-white">Option B Skipping</strong>: If an item in your sheet matches an IS standard but the exact size is not ticked in your Standard settings, it will be neatly listed in the Skipped Rows summary without blocking your import.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-5 bg-slate-950 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <span className="text-xs text-slate-400 font-medium">
+                Ready to use this format? Click download to get a clean, blank `.xlsx` template ready for your data.
+              </span>
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => setShowTemplatePreview(false)}
+                  className="bg-slate-900 border border-slate-800 hover:bg-slate-850 text-slate-300 font-bold px-4 py-2.5 rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Close Preview
+                </button>
+                <button
+                  onClick={() => {
+                    handleDownloadTemplate();
+                    setShowTemplatePreview(false);
+                  }}
+                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Excel Template (.xlsx)</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
