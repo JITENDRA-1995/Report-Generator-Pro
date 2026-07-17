@@ -20,11 +20,16 @@ import {
   FileSpreadsheet,
   UploadCloud,
   Workflow,
-  RefreshCw
+  RefreshCw,
+  Eye,
+  X,
+  Table,
+  Info
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as XLSX from "xlsx";
 import XLSXStyle from "xlsx-js-style";
+import { applyWorksheetTableStyle } from "@/lib/excelHelper";
 import { initializeDefaultConversions } from "./SmsSettings";
 interface ProductionEntry {
   id: string;
@@ -181,6 +186,10 @@ export default function SmsEntryPanel() {
   const [initStockValue, setInitStockValue] = useState<string>("");
   const [dismissedInitModalFor, setDismissedInitModalFor] = useState<{ size: string; month: string; year: string } | null>(null);
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [showProdImportWizard, setShowProdImportWizard] = useState<boolean>(false);
+  const [showProdTemplatePreview, setShowProdTemplatePreview] = useState<boolean>(false);
+  const [showConsigneeImportWizard, setShowConsigneeImportWizard] = useState<boolean>(false);
+  const [showConsigneeTemplatePreview, setShowConsigneeTemplatePreview] = useState<boolean>(false);
   const [importTab, setImportTab] = useState<"production" | "dispatch">("production");
   const [exportProd, setExportProd] = useState<boolean>(true);
   const [exportDisp, setExportDisp] = useState<boolean>(true);
@@ -1200,112 +1209,87 @@ export default function SmsEntryPanel() {
   const stockTotalDispPipe = filteredStockEntries.reduce((sum, item) => sum + item.dispPipe, 0);
   const stockTotalDispMtrPipe = filteredStockEntries.reduce((sum, item) => sum + item.dispMtrPipe, 0);
 
-  // Download Production Excel Template
-  const handleDownloadProdTemplate = () => {
-    let headers: string[] = [];
-    let sampleRows: any[] = [];
-    const todayStr = formatDateToDMY(new Date().toISOString().split("T")[0]);
-
-    if (id === "is13488" || id === "is12786") {
-      headers = ["Date (DD/MM/YYYY)", "Size", "Coils", "Mtr Per Coil", "Mtr", "Kg", "Value"];
-      sampleRows = sizes.map(sz => ({
-        "Date (DD/MM/YYYY)": todayStr,
-        "Size": sz,
-        "Coils": 10,
-        "Mtr Per Coil": 500,
-        "Mtr": 5000,
-        "Kg": 250,
-        "Value": 15000
-      }));
-    } else if (id === "is4985") {
-      headers = ["Date (DD/MM/YYYY)", "Size", "Pipe", "Kg", "Tonn", "Value"];
-      sampleRows = sizes.map(sz => ({
-        "Date (DD/MM/YYYY)": todayStr,
-        "Size": sz,
-        "Pipe": 20,
-        "Kg": 180,
-        "Tonn": 0.18,
-        "Value": 25000
-      }));
-    } else if (id === "is17425") {
-      headers = ["Date (DD/MM/YYYY)", "Size", "Pipe", "Value"];
-      sampleRows = sizes.map(sz => ({
-        "Date (DD/MM/YYYY)": todayStr,
-        "Size": sz,
-        "Pipe": 20,
-        "Value": 12000
-      }));
-    } else if (id === "is13487") {
-      headers = ["Date (DD/MM/YYYY)", "Size", "Nos", "Thousand Unit", "Value"];
-      sampleRows = sizes.map(sz => ({
-        "Date (DD/MM/YYYY)": todayStr,
-        "Size": sz,
-        "Nos": 5000,
-        "Thousand Unit": 5,
-        "Value": 8000
-      }));
+  const getProdTemplateInfo = (stdId: string) => {
+    if (stdId === "is13488" || stdId === "is12786") {
+      return {
+        headers: ["Date", "Size & Class", "Coils", "Mtr Per Coil", "Total Mtr", "Kg Weight", "Value Rs"],
+        widths: [{ wch: 14 }, { wch: 26 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }],
+        sample: [
+          { "Date": "15/07/2026", "Size & Class": stdId === "is13488" ? "16mm CL-1" : "20mm Cl-1", "Coils": 2, "Mtr Per Coil": 500, "Total Mtr": 1000, "Kg Weight": 45.5, "Value Rs": 12500 },
+          { "Date": "16/07/2026", "Size & Class": stdId === "is13488" ? "16mm Cl-2" : "20mm Cl-2", "Coils": 1, "Mtr Per Coil": 500, "Total Mtr": 500, "Kg Weight": 24.0, "Value Rs": 6800 }
+        ],
+        desc: "Upload production records with date, size, coil counts, and weights. For Plain Laterals (IS 12786), mixed coil lengths (e.g., 200m & 500m) are automatically normalized."
+      };
+    } else if (stdId === "is13487") {
+      return {
+        headers: ["Date", "Size", "Production Nos", "Thousand Unit", "Value Rs"],
+        widths: [{ wch: 14 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 14 }],
+        sample: [
+          { "Date": "15/07/2026", "Size": "4 LPH", "Production Nos": 5000, "Thousand Unit": 5.0, "Value Rs": 15000 },
+          { "Date": "16/07/2026", "Size": "8 LPH", "Production Nos": 3000, "Thousand Unit": 3.0, "Value Rs": 9500 }
+        ],
+        desc: "Upload dripper production logs in numbers or thousand units (`Nos / 1000`)."
+      };
+    } else if (stdId === "is4985") {
+      return {
+        headers: ["Date", "Size & Class", "Pipe Qty", "Tonn Weight", "Value Rs"],
+        widths: [{ wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 14 }],
+        sample: [
+          { "Date": "15/07/2026", "Size & Class": "63mm Cl-2", "Pipe Qty": 150, "Tonn Weight": 1.25, "Value Rs": 85000 },
+          { "Date": "16/07/2026", "Size & Class": "75mm Cl-2", "Pipe Qty": 100, "Tonn Weight": 0.95, "Value Rs": 64000 }
+        ],
+        desc: "Upload uPVC pipe production logs. Tonnage is automatically mapped to Kg weight (`tonn * 1000`)."
+      };
+    } else if (stdId === "is17425") {
+      return {
+        headers: ["Date", "Size", "Production Nos", "Value Rs"],
+        widths: [{ wch: 14 }, { wch: 28 }, { wch: 18 }, { wch: 14 }],
+        sample: [
+          { "Date": "15/07/2026", "Size": "75mm Cl-1", "Production Nos": 200, "Value Rs": 110000 },
+          { "Date": "16/07/2026", "Size": "90mm Cl-1", "Production Nos": 120, "Value Rs": 88000 }
+        ],
+        desc: "Upload HDPE sprinkler pipe production records in pipe counts (`Nos`)."
+      };
     } else {
-      headers = ["Date (DD/MM/YYYY)", "Size", "Nos", "Value"];
-      sampleRows = sizes.map(sz => ({
-        "Date (DD/MM/YYYY)": todayStr,
-        "Size": sz,
-        "Nos": 200,
-        "Value": 9000
-      }));
+      return {
+        headers: ["Date", "Size", "Production Nos", "Value Rs"],
+        widths: [{ wch: 14 }, { wch: 28 }, { wch: 18 }, { wch: 14 }],
+        sample: [
+          { "Date": "15/07/2026", "Size": "V-1\" (25mm)", "Production Nos": 50, "Value Rs": 25000 },
+          { "Date": "16/07/2026", "Size": "V-2\" (50mm)", "Production Nos": 25, "Value Rs": 18000 }
+        ],
+        desc: "Upload venturi injector production logs in numbers (`Nos`)."
+      };
     }
-
-    const ws = XLSX.utils.json_to_sheet(sampleRows, { header: headers });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Production");
-    XLSX.writeFile(wb, `${id?.toUpperCase()}_Production_Template.xlsx`);
   };
 
-  // Download Dispatch Excel Template
-  const handleDownloadDispTemplate = () => {
-    let headers: string[] = [];
-    let sampleRows: any[] = [];
-    const todayStr = formatDateToDMY(new Date().toISOString().split("T")[0]);
-
-    if (id === "is13488" || id === "is12786") {
-      headers = ["Date (DD/MM/YYYY)", "Size", "Party Name", "Bill No", "Batch No", "Mtr", "Value"];
-      sampleRows = sizes.map((sz, idx) => ({
-        "Date (DD/MM/YYYY)": todayStr,
-        "Size": sz,
-        "Party Name": "Sample Party Ltd",
-        "Bill No": `B-${1000 + idx}`,
-        "Batch No": `BAT-2026${idx}`,
-        "Mtr": 2000,
-        "Value": 6000
-      }));
-    } else if (id === "is4985") {
-      headers = ["Date (DD/MM/YYYY)", "Size", "Party Name", "Bill No", "Batch No", "Pipe", "Mtr", "Value"];
-      sampleRows = sizes.map((sz, idx) => ({
-        "Date (DD/MM/YYYY)": todayStr,
-        "Size": sz,
-        "Party Name": "Sample Party Ltd",
-        "Bill No": `B-${1000 + idx}`,
-        "Batch No": `BAT-2026${idx}`,
-        "Pipe": 10,
-        "Mtr": 60,
-        "Value": 8000
-      }));
-    } else {
-      headers = ["Date (DD/MM/YYYY)", "Size", "Party Name", "Bill No", "Batch No", "Nos", "Value"];
-      sampleRows = sizes.map((sz, idx) => ({
-        "Date (DD/MM/YYYY)": todayStr,
-        "Size": sz,
-        "Party Name": "Sample Party Ltd",
-        "Bill No": `B-${1000 + idx}`,
-        "Batch No": `BAT-2026${idx}`,
-        "Nos": 50,
-        "Value": 4500
-      }));
-    }
-
-    const ws = XLSX.utils.json_to_sheet(sampleRows, { header: headers });
+  const handleDownloadProdTemplate = () => {
+    const info = getProdTemplateInfo(id || "");
+    const ws = XLSX.utils.json_to_sheet([], { header: info.headers });
+    ws["!cols"] = info.widths;
+    applyWorksheetTableStyle(ws, info.widths);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Dispatch");
-    XLSX.writeFile(wb, `${id?.toUpperCase()}_Dispatch_Template.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, `Prod_Template_${(id || "").toUpperCase()}`);
+    XLSXStyle.writeFile(wb, `SMS_Production_Template_${(id || "").toUpperCase()}.xlsx`);
+  };
+
+  const consigneeSalesTemplateInfo = {
+    headers: ["Party Name", "Item Name", "Date", "Qty"],
+    widths: [{ wch: 28 }, { wch: 32 }, { wch: 14 }, { wch: 12 }],
+    sample: [
+      { "Party Name": "Kisan Agro Kendra", "Item Name": "16mm CL-1 Emitting Pipe", "Date": "15/07/2026", "Qty": 1000 },
+      { "Party Name": "Patel Farm Supplies", "Item Name": "20mm Cl-1 Plain Lateral", "Date": "16/07/2026", "Qty": 500 }
+    ],
+    desc: "Upload consignee sales spreadsheet to auto-populate dispatch entries. The parser extracts sizes and maps quantities (`Qty`) according to standard rules."
+  };
+
+  const handleDownloadConsigneeSalesTemplate = () => {
+    const ws = XLSX.utils.json_to_sheet([], { header: consigneeSalesTemplateInfo.headers });
+    ws["!cols"] = consigneeSalesTemplateInfo.widths;
+    applyWorksheetTableStyle(ws, consigneeSalesTemplateInfo.widths);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Consignee_Sales_Template");
+    XLSXStyle.writeFile(wb, `SMS_Consignee_Sales_Template_${(id || "").toUpperCase()}.xlsx`);
   };
 
   // Parser helper
@@ -3856,17 +3840,36 @@ export default function SmsEntryPanel() {
                       />
                     </label>
 
-                    <label className="flex flex-col items-center justify-center border border-dashed border-slate-800 hover:border-indigo-500/40 bg-slate-950/50 rounded-xl p-5 cursor-pointer hover:bg-slate-950 transition-all text-center">
-                      <UploadCloud className="w-8 h-8 text-emerald-400 mb-2" />
-                      <span className="text-xs font-semibold text-slate-350">Import Consignee Sales Excel</span>
-                      <span className="text-[10px] text-slate-500 mt-1">Extract sizes & quantities from Consignee Sales files</span>
-                      <input 
-                        type="file" 
-                        accept=".xlsx, .xls" 
-                        onChange={handleImportConsigneeSales} 
-                        className="hidden" 
-                      />
-                    </label>
+                    <div className="flex flex-col justify-between border border-dashed border-slate-800 hover:border-indigo-500/40 bg-slate-950/50 rounded-xl p-4.5 transition-all">
+                      <div className="flex flex-col items-center cursor-pointer text-center" onClick={() => { setShowConsigneeTemplatePreview(false); setShowConsigneeImportWizard(true); }}>
+                        <UploadCloud className="w-8 h-8 text-emerald-400 mb-1.5" />
+                        <span className="text-xs font-semibold text-slate-300">Import Consignee Sales Excel</span>
+                        <span className="text-[10px] text-slate-500 mt-0.5">Extract sizes & quantities from Consignee Sales spreadsheets</span>
+                      </div>
+                      <div className="flex items-center justify-center gap-2 mt-3.5 pt-3 border-t border-slate-900/90">
+                        <button
+                          type="button"
+                          onClick={() => { setShowConsigneeTemplatePreview(true); setShowConsigneeImportWizard(true); }}
+                          className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Preview</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadConsigneeSalesTemplate}
+                          className="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/20 text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Template</span>
+                        </button>
+                        <label className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload File</span>
+                          <input type="file" accept=".xlsx, .xls" onChange={handleImportConsigneeSales} className="hidden" />
+                        </label>
+                      </div>
+                    </div>
                   </div>
                   {importStatus && (
                     <div className={`p-3 rounded-lg text-xs font-semibold ${
@@ -4430,16 +4433,14 @@ export default function SmsEntryPanel() {
                       </span>
                     )}
 
-                    <label className="bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 cursor-pointer transition-colors h-9">
+                    <button
+                      type="button"
+                      onClick={() => { setShowProdTemplatePreview(false); setShowProdImportWizard(true); }}
+                      className="bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 cursor-pointer transition-colors h-9 shadow-sm"
+                    >
                       <Upload className="w-4 h-4 text-indigo-400" />
-                      <span>Import Production Excel</span>
-                      <input 
-                        type="file" 
-                        accept=".xlsx, .xls" 
-                        onChange={handleImportProdExcel} 
-                        className="hidden" 
-                      />
-                    </label>
+                      <span>Production Import Wizard</span>
+                    </button>
 
                     <span className="text-[10px] px-2 py-1 rounded bg-slate-900 text-slate-400 border border-slate-800 font-semibold">
                       {filteredEntries.length} Records
@@ -5586,6 +5587,298 @@ export default function SmsEntryPanel() {
               >
                 Save Details
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Production Import Wizard & Preview Modal */}
+      {showProdImportWizard && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 max-w-4xl w-full rounded-3xl overflow-hidden shadow-2xl relative my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                  <FileSpreadsheet className="w-5 h-5 text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                    Production Import Wizard — {(id || "").toUpperCase()}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Select a spreadsheet file to import right now, or preview & download our standard formatted IS template.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowProdImportWizard(false); setShowProdTemplatePreview(false); }}
+                className="p-2 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Option A: Upload Existing File Card */}
+                <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden">
+                  <div className="space-y-3">
+                    <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded">
+                      Option A: Direct Upload
+                    </span>
+                    <h4 className="text-sm font-bold text-slate-200">Upload Existing Excel Spreadsheet</h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      If you already have your daily production logs compiled in an Excel file (`.xlsx` or `.xls`), select it here. Our parser automatically groups entries and calculates totals.
+                    </p>
+                  </div>
+                  <div className="mt-6 pt-4 border-t border-slate-900 flex justify-end">
+                    <label className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all">
+                      <Upload className="w-4 h-4" />
+                      <span>Choose File & Import Now</span>
+                      <input 
+                        type="file" 
+                        accept=".xlsx, .xls" 
+                        onChange={(e) => { setShowProdImportWizard(false); handleImportProdExcel(e); }} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Option B: Standard Template Preview Card */}
+                <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden">
+                  <div className="space-y-3">
+                    <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded">
+                      Option B: Standard Template
+                    </span>
+                    <h4 className="text-sm font-bold text-slate-200">Standard IS Sheet Template</h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Download a clean, pre-formatted Excel template specifically tailored for <strong className="text-slate-300">{(id || "").toUpperCase()}</strong>. Uses vibrant Navy (#366092) headers and starts completely blank without demo data.
+                    </p>
+                  </div>
+                  <div className="mt-6 pt-4 border-t border-slate-900 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowProdTemplatePreview(!showProdTemplatePreview)}
+                      className={`flex-1 py-3 text-xs font-bold rounded-xl border flex items-center justify-center gap-2 transition-all ${
+                        showProdTemplatePreview 
+                          ? "bg-indigo-600/20 border-indigo-500 text-indigo-300" 
+                          : "bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300"
+                      }`}
+                    >
+                      <Eye className="w-4 h-4 text-indigo-400" />
+                      <span>{showProdTemplatePreview ? "Hide Preview" : "Preview Columns"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadProdTemplate}
+                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download Blank</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Template Preview Box (If Expanded) */}
+              {showProdTemplatePreview && (
+                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex items-start gap-3">
+                    <Info className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-slate-300 space-y-1">
+                      <p className="font-bold text-slate-200">Specification Overview for {(id || "").toUpperCase()}:</p>
+                      <p className="text-slate-400">{getProdTemplateInfo(id || "").desc}</p>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950 shadow-inner">
+                    <div className="px-4 py-2.5 bg-slate-900/60 border-b border-slate-800 text-[11px] font-bold text-slate-300 flex items-center justify-between">
+                      <span>Sample Table Layout (Illustration Only)</span>
+                      <span className="text-emerald-400 font-mono text-[10px]">Excel Table Style: Navy Header #366092</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-[#366092] text-white font-bold select-none">
+                            {getProdTemplateInfo(id || "").headers.map((h, i) => (
+                              <th key={i} className="py-2.5 px-4 border border-[#2B4D75] whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                          {getProdTemplateInfo(id || "").sample.map((row: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-slate-900/40">
+                              {getProdTemplateInfo(id || "").headers.map((h, i) => (
+                                <td key={i} className="py-2 px-4 whitespace-nowrap font-mono text-slate-300">{row[h] ?? "-"}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-slate-950 border-t border-slate-800 flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() => { setShowProdImportWizard(false); setShowProdTemplatePreview(false); }}
+                className="border-slate-800 text-slate-300 hover:bg-slate-850 text-xs font-bold h-9 px-5"
+              >
+                Close Wizard
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Consignee Sales Import Wizard & Preview Modal */}
+      {showConsigneeImportWizard && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 max-w-4xl w-full rounded-3xl overflow-hidden shadow-2xl relative my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                  <UploadCloud className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                    Consignee Sales Data Wizard — {(id || "").toUpperCase()}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Upload your consignee dispatch spreadsheet, or preview and download the standardized import template.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowConsigneeImportWizard(false); setShowConsigneeTemplatePreview(false); }}
+                className="p-2 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Option A: Upload File Card */}
+                <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden">
+                  <div className="space-y-3">
+                    <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded">
+                      Option A: Upload Sheet
+                    </span>
+                    <h4 className="text-sm font-bold text-slate-200">Upload Consignee Sales Excel</h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Select your consignee sales spreadsheet (`.xlsx` or `.xls`). The parser scans for `Party Name`, `Item Name`, `Date`, and `Qty`, auto-classifying entries to standard pipe sizes.
+                    </p>
+                  </div>
+                  <div className="mt-6 pt-4 border-t border-slate-900 flex justify-end">
+                    <label className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all">
+                      <Upload className="w-4 h-4" />
+                      <span>Select File & Import</span>
+                      <input 
+                        type="file" 
+                        accept=".xlsx, .xls" 
+                        onChange={(e) => { setShowConsigneeImportWizard(false); handleImportConsigneeSales(e); }} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Option B: Standard Template Preview Card */}
+                <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden">
+                  <div className="space-y-3">
+                    <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded">
+                      Option B: Standard Template
+                    </span>
+                    <h4 className="text-sm font-bold text-slate-200">Consignee Sales Template</h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Download our clean, professional Excel template (`Party Name`, `Item Name`, `Date`, `Qty`) formatted with Navy (#366092) headers. Downloaded completely blank without demo data.
+                    </p>
+                  </div>
+                  <div className="mt-6 pt-4 border-t border-slate-900 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowConsigneeTemplatePreview(!showConsigneeTemplatePreview)}
+                      className={`flex-1 py-3 text-xs font-bold rounded-xl border flex items-center justify-center gap-2 transition-all ${
+                        showConsigneeTemplatePreview 
+                          ? "bg-indigo-600/20 border-indigo-500 text-indigo-300" 
+                          : "bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300"
+                      }`}
+                    >
+                      <Eye className="w-4 h-4 text-indigo-400" />
+                      <span>{showConsigneeTemplatePreview ? "Hide Preview" : "Preview Columns"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadConsigneeSalesTemplate}
+                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download Blank</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Template Preview Box (If Expanded) */}
+              {showConsigneeTemplatePreview && (
+                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex items-start gap-3">
+                    <Info className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-slate-300 space-y-1">
+                      <p className="font-bold text-slate-200">Consignee Sales Mapping Notes:</p>
+                      <p className="text-slate-400">{consigneeSalesTemplateInfo.desc}</p>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950 shadow-inner">
+                    <div className="px-4 py-2.5 bg-slate-900/60 border-b border-slate-800 text-[11px] font-bold text-slate-300 flex items-center justify-between">
+                      <span>Consignee Sales Sheet Layout</span>
+                      <span className="text-emerald-400 font-mono text-[10px]">Excel Table Style: Navy Header #366092</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-[#366092] text-white font-bold select-none">
+                            {consigneeSalesTemplateInfo.headers.map((h, i) => (
+                              <th key={i} className="py-2.5 px-4 border border-[#2B4D75] whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                          {consigneeSalesTemplateInfo.sample.map((row: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-slate-900/40">
+                              {consigneeSalesTemplateInfo.headers.map((h, i) => (
+                                <td key={i} className="py-2 px-4 whitespace-nowrap font-mono text-slate-300">{row[h] ?? "-"}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-slate-950 border-t border-slate-800 flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() => { setShowConsigneeImportWizard(false); setShowConsigneeTemplatePreview(false); }}
+                className="border-slate-800 text-slate-300 hover:bg-slate-850 text-xs font-bold h-9 px-5"
+              >
+                Close Wizard
+              </Button>
             </div>
           </div>
         </div>

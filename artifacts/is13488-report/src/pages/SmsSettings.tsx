@@ -18,9 +18,15 @@ import {
   X,
   AlertTriangle,
   FileSpreadsheet,
-  Users
+  Users,
+  Eye,
+  Table,
+  Info
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import * as XLSX from "xlsx";
+import XLSXStyle from "xlsx-js-style";
+import { applyWorksheetTableStyle } from "@/lib/excelHelper";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -151,6 +157,8 @@ export default function SmsSettings() {
   
   // Consignee states
   const [consigneesList, setConsigneesList] = useState<ConsigneeDetails[]>([]);
+  const [showConsigneePreviewModal, setShowConsigneePreviewModal] = useState<boolean>(false);
+  const [consigneeImportBanner, setConsigneeImportBanner] = useState<{ type: "success" | "error"; message: string } | null>(null);
   
   // Consignee registration states
   const [newConsigneeName, setNewConsigneeName] = useState<string>("");
@@ -319,6 +327,88 @@ export default function SmsSettings() {
     loadConsigneesList();
     cleanupLegacyImportedConsigneeData();
   }, []);
+
+  const handleDownloadConsigneeTemplate = () => {
+    const headers = ["Consignee Name", "Address", "City", "District", "State", "Country", "Pincode", "Telephone", "Mobile", "Email", "Look For"];
+    const ws = XLSX.utils.json_to_sheet([], { header: headers });
+    const widths = [
+      { wch: 24 }, { wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+      { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 28 }
+    ];
+    ws["!cols"] = widths;
+    applyWorksheetTableStyle(ws, widths);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Consignees_Template");
+    XLSXStyle.writeFile(wb, "SMS_Consignee_Master_Template.xlsx");
+  };
+
+  const handleImportConsigneesExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: "binary", cellDates: false });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        if (!ws) {
+          setConsigneeImportBanner({ type: "error", message: "No worksheet found in file." });
+          return;
+        }
+
+        const rows = XLSX.utils.sheet_to_json(ws) as any[];
+        if (rows.length === 0) {
+          setConsigneeImportBanner({ type: "error", message: "Uploaded sheet has no data rows." });
+          return;
+        }
+
+        let addedCount = 0;
+        let updatedCount = 0;
+        const currentList = [...consigneesList];
+
+        rows.forEach((row) => {
+          const nameVal = String(row["Consignee Name"] || row["Name"] || row["consignee_name"] || "").trim();
+          if (!nameVal) return;
+
+          const existingIdx = currentList.findIndex(c => c.name.toLowerCase() === nameVal.toLowerCase());
+          const newObj: ConsigneeDetails = {
+            name: nameVal,
+            address: String(row["Address"] || "").trim(),
+            city: String(row["City"] || "").trim(),
+            district: String(row["District"] || "").trim(),
+            state: String(row["State"] || "").trim(),
+            country: String(row["Country"] || "India").trim(),
+            pincode: String(row["Pincode"] || "").trim(),
+            telephone: String(row["Telephone"] || "").trim(),
+            mobile: String(row["Mobile"] || "").trim(),
+            email: String(row["Email"] || "").trim(),
+            lookFor: String(row["Look For"] || row["Alias"] || "").trim()
+          };
+
+          if (existingIdx >= 0) {
+            currentList[existingIdx] = { ...currentList[existingIdx], ...newObj };
+            updatedCount++;
+          } else {
+            currentList.push(newObj);
+            addedCount++;
+          }
+          smsStorage.saveConsignee(newObj);
+        });
+
+        const sorted = currentList.sort((a, b) => a.name.localeCompare(b.name));
+        setConsigneesList(sorted);
+        setConsigneeImportBanner({
+          type: "success",
+          message: `Successfully processed file! Added ${addedCount} new and updated ${updatedCount} existing consignees.`
+        });
+        if (e.target) e.target.value = "";
+      } catch (err: any) {
+        setConsigneeImportBanner({ type: "error", message: `Error reading file: ${err?.message || String(err)}` });
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
 
   const handleAddConsignee = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1779,6 +1869,69 @@ export default function SmsSettings() {
                 Add, edit, or delete regular consignees (parties) to choose from when generating the Consignee Report.
               </div>
 
+              {/* Consignee Import Status Banner */}
+              {consigneeImportBanner && (
+                <div className={`p-4 rounded-xl border text-xs font-medium flex items-center justify-between ${
+                  consigneeImportBanner.type === "success"
+                    ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                    : "bg-rose-500/10 border-rose-500/25 text-rose-400"
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{consigneeImportBanner.message}</span>
+                  </div>
+                  <button onClick={() => setConsigneeImportBanner(null)} className="text-slate-400 hover:text-slate-200 font-extrabold uppercase tracking-wider text-[10px]">
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              {/* Standard Template & Bulk Import Section */}
+              <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 relative overflow-hidden">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
+                      <h3 className="text-sm font-bold text-slate-100">Bulk Consignee Directory Import</h3>
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed max-w-xl">
+                      Quickly register or update multiple consignees at once using our standardized Excel template. Preview the required columns before downloading.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowConsigneePreviewModal(true)}
+                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold rounded-xl border border-slate-800 flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
+                    >
+                      <Eye className="w-4 h-4 text-indigo-400" />
+                      <span>Preview Template</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadConsigneeTemplate}
+                      className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/25 text-xs font-bold rounded-xl flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Download Template (.xlsx)</span>
+                    </button>
+
+                    <label className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-colors cursor-pointer shadow-md">
+                      <Upload className="w-4 h-4" />
+                      <span>Upload Consignee Sheet</span>
+                      <input
+                        type="file"
+                        accept=".xlsx, .xls"
+                        onChange={handleImportConsigneesExcel}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               {/* Add New Consignee Form */}
               <form onSubmit={handleAddConsignee} className="bg-slate-900/50 border border-slate-900 p-5 rounded-xl space-y-4">
                 <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -2155,6 +2308,130 @@ export default function SmsSettings() {
               >
                 Confirm
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Consignee Master Template Preview Modal */}
+      {showConsigneePreviewModal && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 max-w-5xl w-full rounded-3xl overflow-hidden shadow-2xl relative my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-5 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                  <Table className="w-5 h-5 text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-100 flex items-center gap-2">
+                    Standard Consignee Directory Template Preview
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    This template uses standard Navy (#366092) headers and bold white font. Download it blank without demo data to import your consignees.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowConsigneePreviewModal(false)}
+                className="p-2 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              {/* Guidance Notice */}
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl flex items-start gap-3">
+                <Info className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-slate-300 space-y-1">
+                  <p className="font-bold text-slate-200">Key Guidelines for Consignee Master Import:</p>
+                  <ul className="list-disc pl-4 space-y-0.5 text-slate-400">
+                    <li><strong className="text-slate-300">Consignee Name</strong> is required and unique. If a name matches an existing consignee, that record is automatically updated.</li>
+                    <li><strong className="text-slate-300">Look For / Alias</strong> allows you to map alternate spelling or city suffixes (e.g., <code className="bg-slate-900 px-1 py-0.5 rounded text-indigo-300">Siddhi Corporation / prantij</code>).</li>
+                    <li>When downloaded, all columns are formatted cleanly with Excel Table styles ready for immediate entry.</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Table Preview */}
+              <div className="border border-slate-800 rounded-2xl overflow-hidden bg-slate-950 shadow-inner">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[#366092] text-white font-bold select-none">
+                        <th className="py-3 px-4 border border-[#2B4D75]">Consignee Name</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">Address</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">City</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">District</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">State</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">Country</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">Pincode</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">Telephone</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">Mobile</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">Email</th>
+                        <th className="py-3 px-4 border border-[#2B4D75]">Look For</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                      <tr className="hover:bg-slate-900/40">
+                        <td className="py-2.5 px-4 font-semibold text-slate-200">Siddhi Corporation</td>
+                        <td className="py-2.5 px-4 text-slate-400">GIDC Phase 2, Plot 45</td>
+                        <td className="py-2.5 px-4">Prantij</td>
+                        <td className="py-2.5 px-4 text-slate-400">Sabarkantha</td>
+                        <td className="py-2.5 px-4">Gujarat</td>
+                        <td className="py-2.5 px-4 text-slate-400">India</td>
+                        <td className="py-2.5 px-4 text-slate-400">383205</td>
+                        <td className="py-2.5 px-4 text-slate-400">02770-240123</td>
+                        <td className="py-2.5 px-4">9825012345</td>
+                        <td className="py-2.5 px-4 text-slate-400">siddhi@example.com</td>
+                        <td className="py-2.5 px-4 text-indigo-300 font-mono text-[11px]">Siddhi Corp, Prantij</td>
+                      </tr>
+                      <tr className="hover:bg-slate-900/40 bg-slate-900/10">
+                        <td className="py-2.5 px-4 font-semibold text-slate-200">Kisan Agro Kendra</td>
+                        <td className="py-2.5 px-4 text-slate-400">Main Market Yard</td>
+                        <td className="py-2.5 px-4">Mehsana</td>
+                        <td className="py-2.5 px-4 text-slate-400">Mehsana</td>
+                        <td className="py-2.5 px-4">Gujarat</td>
+                        <td className="py-2.5 px-4 text-slate-400">India</td>
+                        <td className="py-2.5 px-4 text-slate-400">384002</td>
+                        <td className="py-2.5 px-4 text-slate-400">02762-251456</td>
+                        <td className="py-2.5 px-4">9426098765</td>
+                        <td className="py-2.5 px-4 text-slate-400">kisanagro@example.com</td>
+                        <td className="py-2.5 px-4 text-indigo-300 font-mono text-[11px]">Kisan Agro</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-xs text-slate-400 font-medium">
+                Ready to import your consignees? Download this blank template to start.
+              </span>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowConsigneePreviewModal(false)}
+                  className="border-slate-800 text-slate-300 hover:bg-slate-850 text-xs font-bold h-9 px-4"
+                >
+                  Close Preview
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDownloadConsigneeTemplate();
+                    setShowConsigneePreviewModal(false);
+                  }}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Blank Template (.xlsx)</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
