@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { 
   FileCheck, 
   Download, 
@@ -266,6 +266,7 @@ interface IS13488MonthlyAuditRow {
   kg_16mm_cl1: number;
   total_kg: number;
   value: number;
+  [key: string]: any;
 }
 
 interface IS12786MonthlyAuditRow {
@@ -286,6 +287,7 @@ interface IS12786MonthlyAuditRow {
   kg_20mm_cl2: number;
   total_kg: number;
   value: number;
+  [key: string]: any;
 }
 
 interface IS17425MonthlyAuditRow {
@@ -294,8 +296,10 @@ interface IS17425MonthlyAuditRow {
   prod_75mm_cl1: number;
   prod_75mm_cl2: number;
   prod_90mm_cl1: number;
-  total_nos: number;
+  total_nos?: number;
+  total_prod: number;
   value: number;
+  [key: string]: any;
 }
 
 interface IS13487MonthlyAuditRow {
@@ -305,9 +309,11 @@ interface IS13487MonthlyAuditRow {
   prod_8lph: number;
   prod_14lph: number;
   prod_16lph: number;
-  total_nos: number;
+  total_nos?: number;
+  total_prod: number;
   unit_of_1000: number;
   value: number;
+  [key: string]: any;
 }
 
 interface IS14483MonthlyAuditRow {
@@ -315,8 +321,10 @@ interface IS14483MonthlyAuditRow {
   monthKey: string;
   prod_2inch: number;
   prod_1inch: number;
-  total_nos: number;
+  total_nos?: number;
+  total_prod: number;
   value: number;
+  [key: string]: any;
 }
 
 interface IS4985MonthlyAuditRow {
@@ -368,7 +376,7 @@ export default function SmsRenewalData() {
   const { toast } = useToast();
   const [selectedStandard, setSelectedStandard] = useState<string>("is13488");
   const [viewMode, setViewMode] = useState<"audit" | "detailed">("audit");
-  const [selectedYear, setSelectedYear] = useState<string>("2026-27");
+  const [selectedYear, setSelectedYear] = useState<string>("All");
   const [selectedSize, setSelectedSize] = useState<string>("All Sizes");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [productionData, setProductionData] = useState<smsStorage.ProductionEntry[]>([]);
@@ -378,13 +386,11 @@ export default function SmsRenewalData() {
   const [wizardSelectedSizes, setWizardSelectedSizes] = useState<string[]>([]);
   const [inlineConversions, setInlineConversions] = useState<Record<string, string>>({});
 
-  // Load production & license data whenever selected standard changes
-  useEffect(() => {
-    // Load production entries from local storage / cloud
+  // Load production & license data whenever selected standard changes or storage updates
+  const loadData = useCallback(() => {
     const prod = smsStorage.getLocalProduction(selectedStandard);
     setProductionData(prod);
 
-    // Load license metadata (strict certificate validity period)
     const savedLicense = localStorage.getItem(`sms_license_info_${selectedStandard}`);
     let baseLicense = defaultLicenseInfo[selectedStandard] || defaultLicenseInfo["is13488"];
     if (savedLicense) {
@@ -394,9 +400,19 @@ export default function SmsRenewalData() {
         baseLicense = defaultLicenseInfo[selectedStandard] || defaultLicenseInfo["is13488"];
       }
     }
-
     setLicenseInfo(baseLicense);
   }, [selectedStandard]);
+
+  useEffect(() => {
+    loadData();
+    const handleStorage = () => loadData();
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleStorage);
+    };
+  }, [loadData]);
 
   // Save updated license renewal info
   const handleSaveLicenseInfo = () => {
@@ -412,8 +428,20 @@ export default function SmsRenewalData() {
   const currentRenewalPeriod = useMemo(() => {
     const bounds = getRenewalPeriodBounds(selectedStandard, selectedYear);
     if (bounds) return bounds;
-    return { start: licenseInfo.validFrom, end: licenseInfo.validTo };
-  }, [selectedStandard, selectedYear, licenseInfo.validFrom, licenseInfo.validTo]);
+
+    // When "All" is selected, dynamically expand the bounds so ALL production entries in any year are shown
+    let start = licenseInfo.validFrom || "2024-01-01";
+    let end = licenseInfo.validTo || "2027-12-31";
+    if (productionData && productionData.length > 0) {
+      productionData.forEach(item => {
+        if (item.date) {
+          if (!start || item.date < start) start = item.date;
+          if (!end || item.date > end) end = item.date;
+        }
+      });
+    }
+    return { start, end };
+  }, [selectedStandard, selectedYear, licenseInfo.validFrom, licenseInfo.validTo, productionData]);
 
   // Filtered production data
   const filteredData = useMemo(() => {
@@ -536,7 +564,7 @@ export default function SmsRenewalData() {
       if (!row) return;
 
       const sz = (item.size || "").toLowerCase();
-      const mtr = item.mtr || 0;
+      const mtr = item.mtr || (item.coils && item.mtrPerCoil ? item.coils * item.mtrPerCoil : item.coils) || item.nos || item.pipe || (item.thousandUnit ? item.thousandUnit * 1000 : 0) || 0;
       const kg = item.kg || (item.tonn ? item.tonn * 1000 : 0);
 
       if (sz.includes("12mm") && (sz.includes("cl-2") || sz.includes("(ii)"))) {
@@ -750,7 +778,7 @@ export default function SmsRenewalData() {
       if (!row) return;
 
       const sz = (item.size || "").toLowerCase();
-      const mtr = item.mtr || item.coils || 0;
+      const mtr = item.mtr || (item.coils && item.mtrPerCoil ? item.coils * item.mtrPerCoil : item.coils) || item.nos || item.pipe || (item.thousandUnit ? item.thousandUnit * 1000 : 0) || 0;
       const kg = item.kg || (item.tonn ? item.tonn * 1000 : 0);
 
       if (sz.includes("12mm")) {
@@ -974,7 +1002,7 @@ export default function SmsRenewalData() {
       if (!row) return;
 
       const sz = (item.size || "").toLowerCase();
-      const qty = item.nos || item.pipe || item.mtr || 0;
+      const qty = item.nos || item.pipe || item.mtr || (item.coils && item.mtrPerCoil ? item.coils * item.mtrPerCoil : item.coils) || (item.thousandUnit ? item.thousandUnit * 1000 : 0) || 0;
 
       if (sz.includes("75mm") && (sz.includes("cl-2") || sz.includes("(ii)"))) {
         row.prod_75mm_cl2 += qty;
@@ -1098,7 +1126,7 @@ export default function SmsRenewalData() {
       if (!row) return;
 
       const sz = (item.size || "").toLowerCase();
-      const qty = item.nos || item.thousandUnit || item.mtr || 0;
+      const qty = item.nos || (item.thousandUnit ? item.thousandUnit * 1000 : 0) || item.mtr || item.pipe || (item.coils && item.mtrPerCoil ? item.coils * item.mtrPerCoil : item.coils) || 0;
 
       if (sz.includes("8 lph") || sz.includes("8lph")) {
         row.prod_8lph += qty;
@@ -1232,7 +1260,7 @@ export default function SmsRenewalData() {
       if (!row) return;
 
       const sz = (item.size || "").toLowerCase();
-      const qty = item.nos || item.pipe || 0;
+      const qty = item.nos || item.pipe || item.mtr || (item.coils && item.mtrPerCoil ? item.coils * item.mtrPerCoil : item.coils) || (item.thousandUnit ? item.thousandUnit * 1000 : 0) || 0;
 
       if (sz.includes("1\"") || sz.includes("25mm") || sz.includes("1 inch")) {
         row.prod_1inch += qty;
@@ -1382,7 +1410,7 @@ export default function SmsRenewalData() {
       if (!row) return;
 
       const szInfo = getIS4985SizeInfo(item.size || "");
-      const qty = item.pipe || item.nos || item.mtr || 0;
+      const qty = item.pipe || item.nos || item.mtr || (item.coils && item.mtrPerCoil ? item.coils * item.mtrPerCoil : item.coils) || (item.thousandUnit ? item.thousandUnit * 1000 : 0) || 0;
       const conv = Number(localStorage.getItem(szInfo.convKey) || szInfo.defaultConv);
       const kg = item.kg || (item.tonn ? item.tonn * 1000 : qty * conv);
 
@@ -1467,7 +1495,7 @@ export default function SmsRenewalData() {
     const conversions: IS4985MonthlyAuditRow = createIS4985RowObj2("", "CONVERSIONS (KG/PIPE)", "CONVERSIONS");
     exportSizesConfig.is4985.forEach(opt => {
       const wtKey = opt.id.replace("pipe_", "wt_");
-      conversions[wtKey] = Number(localStorage.getItem(opt.convKey) || opt.defaultConv);
+      conversions[wtKey] = Number(localStorage.getItem(opt.convKey || "") || opt.defaultConv);
     });
 
     return { rows: rowsList, summary, fullLastMonth, conversions };
@@ -1485,7 +1513,7 @@ export default function SmsRenewalData() {
     const titleRows = [
       [`IS CODE : ${currentStdObj.code}`],
       [`LICENSE / CM/L NO.: ${licenseInfo.cmlNumber}`],
-      [`RENEWAL PRODUCTION PERIOD: ${currentRenewalPeriod.start} to ${currentRenewalPeriod.end} (${selectedYear})`],
+      [`RENEWAL PRODUCTION PERIOD: ${currentRenewalPeriod.start} to ${currentRenewalPeriod.end}`],
       []
     ];
 
@@ -1514,7 +1542,7 @@ export default function SmsRenewalData() {
         const opt = availableOptions.find(o => o.id === sizeId);
         headers.push(opt ? opt.label.replace("(Pipe)", "wt.").replace(" 6kg", " wt. 6kg") : `${sizeId} wt.`);
       });
-      headers.push("Total Weight (MT)", "Total Weight (Kg)", "Value (₹)");
+      headers.push("Total Weight (Kg)", "Total Weight (MT)", "Value (₹)");
     } else if (selectedStandard === "is17425") {
       headers.push("TOTAL (Nos.)", "Value (₹)");
     } else if (selectedStandard === "is13487") {
@@ -1538,52 +1566,59 @@ export default function SmsRenewalData() {
         let val = 0;
         if (selectedStandard === "is13488" || selectedStandard === "is12786") {
           const key = `mtr_${sizeId}`;
-          val = rowObj[key] || 0;
+          val = Number(rowObj[key]) || 0;
         } else {
-          val = rowObj[sizeId] || 0;
+          val = Number(rowObj[sizeId]) || 0;
         }
-        row.push(val || "");
-        totalQty += Number(val) || 0;
+        row.push(val);
+        totalQty += val;
       });
 
       if (selectedStandard === "is13488" || selectedStandard === "is12786") {
-        row.push(totalQty || "");
+        row.push(totalQty);
         let totalKg = 0;
         activeSizes.forEach(sizeId => {
           let kgVal = 0;
           const key = `kg_${sizeId}`;
-          if (rowObj[key] !== undefined) {
-            kgVal = rowObj[key];
+          if (rowObj[key] !== undefined && rowObj[key] !== null && rowObj[key] !== "") {
+            kgVal = Number(rowObj[key]) || 0;
           } else {
             const opt = availableOptions.find(o => o.id === sizeId);
             const conv = Number(inlineConversions[sizeId] || localStorage.getItem(opt?.convKey || "") || opt?.defaultConv || 0);
             const mtrKey = `mtr_${sizeId}`;
-            kgVal = (rowObj[mtrKey] || 0) * conv;
+            kgVal = (Number(rowObj[mtrKey]) || 0) * conv;
           }
-          row.push(kgVal ? Math.round(kgVal * 100) / 100 : "");
-          totalKg += Number(kgVal) || 0;
+          const roundedKg = Math.round(kgVal * 100) / 100;
+          row.push(roundedKg);
+          totalKg += kgVal;
         });
-        row.push(totalKg ? Math.round(totalKg * 100) / 100 : "", rowObj.value ? Math.round(rowObj.value) : "");
+        const roundedTotalKg = Math.round(totalKg * 100) / 100;
+        const roundedValue = Math.round(Number(rowObj.value) || 0);
+        row.push(roundedTotalKg, roundedValue);
       } else if (selectedStandard === "is4985") {
-        row.push(totalQty || "");
-        let totalMt = 0;
+        row.push(totalQty);
+        let totalKg = 0;
         activeSizes.forEach(sizeId => {
           const opt = availableOptions.find(o => o.id === sizeId);
           const conv = Number(inlineConversions[sizeId] || localStorage.getItem(opt?.convKey || "") || opt?.defaultConv || 0);
-          const pipeVal = rowObj[sizeId] || 0;
-          const wtVal = (pipeVal * conv) / 1000;
-          totalMt += wtVal;
-          row.push(wtVal ? Math.round(wtVal * 1000) / 1000 : "");
+          const pipeVal = Number(rowObj[sizeId]) || 0;
+          const kgVal = pipeVal * conv;
+          totalKg += kgVal;
+          const roundedKg = Math.round(kgVal * 100) / 100;
+          row.push(roundedKg);
         });
-        const totalKg = totalMt * 1000;
-        row.push(totalMt ? Math.round(totalMt * 1000) / 1000 : "", totalKg ? Math.round(totalKg) : "", rowObj.value ? Math.round(rowObj.value) : "");
+        const totalMt = totalKg / 1000;
+        const roundedTotalKg = Math.round(totalKg * 100) / 100;
+        const roundedTotalMt = Math.round(totalMt * 1000) / 1000;
+        const roundedValue = Math.round(Number(rowObj.value) || 0);
+        row.push(roundedTotalKg, roundedTotalMt, roundedValue);
       } else if (selectedStandard === "is17425") {
-        row.push(totalQty || "", rowObj.value ? Math.round(rowObj.value) : "");
+        row.push(totalQty, Math.round(Number(rowObj.value) || 0));
       } else if (selectedStandard === "is13487") {
-        const unit1000 = rowObj.unit_of_1000 !== undefined ? rowObj.unit_of_1000 : (totalQty / 1000);
-        row.push(totalQty || "", unit1000 ? Math.round(unit1000 * 100) / 100 : "", rowObj.value ? Math.round(rowObj.value) : "");
+        const unit1000 = rowObj.unit_of_1000 !== undefined && rowObj.unit_of_1000 !== null && rowObj.unit_of_1000 !== "" ? Number(rowObj.unit_of_1000) : (totalQty / 1000);
+        row.push(totalQty, Math.round(unit1000 * 100) / 100, Math.round(Number(rowObj.value) || 0));
       } else if (selectedStandard === "is14483") {
-        row.push(totalQty || "", rowObj.value ? Math.round(rowObj.value) : "");
+        row.push(totalQty, Math.round(Number(rowObj.value) || 0));
       }
       return row;
     };
@@ -1601,18 +1636,18 @@ export default function SmsRenewalData() {
         activeSizes.forEach(sizeId => {
           const opt = availableOptions.find(o => o.id === sizeId);
           const convKey = `kg_${sizeId}`;
-          const val = inlineConversions[sizeId] || currentAuditData.conversions?.[convKey] || localStorage.getItem(opt?.convKey || "") || opt?.defaultConv || "";
+          const val = Number(inlineConversions[sizeId] || currentAuditData.conversions?.[convKey] || localStorage.getItem(opt?.convKey || "") || opt?.defaultConv || 0);
           conversionsRow.push(val);
         });
         conversionsRow.push("", "");
       }
     } else if (selectedStandard === "is4985") {
-      conversionsRow = ["CONVERSIONS (MT/PIPE)"];
+      conversionsRow = ["CONVERSIONS (KG/PIPE)"];
       activeSizes.forEach(() => conversionsRow.push(""));
       conversionsRow.push("");
       activeSizes.forEach(sizeId => {
         const opt = availableOptions.find(o => o.id === sizeId);
-        const val = inlineConversions[sizeId] || localStorage.getItem(opt?.convKey || "") || opt?.defaultConv || "";
+        const val = Number(inlineConversions[sizeId] || localStorage.getItem(opt?.convKey || "") || opt?.defaultConv || 0);
         conversionsRow.push(val);
       });
       conversionsRow.push("", "", "");
@@ -1648,6 +1683,126 @@ export default function SmsRenewalData() {
     const summaryRowIdx = summaryRow.length ? headerRowIdx + dataRows.length + 1 : -1;
     const fullLastMonthRowIdx = fullLastMonthRow.length ? summaryRowIdx + 2 : -1;
     const conversionsRowIdx = conversionsRow.length ? fullLastMonthRowIdx + 2 : -1;
+
+    // --- Live Formula Injection Pass (cell.f) for IS 13488, IS 12786, and IS 4985 ---
+    // --- Live Formula Injection Pass (cell.f) across All 6 IS Standards ---
+    if (["is13488", "is12786", "is4985", "is17425", "is13487", "is14483"].includes(selectedStandard)) {
+      const dataRowsStart = headerRowIdx + 1;
+      const dataRowsEnd = headerRowIdx + dataRows.length;
+      const targetRows: number[] = [];
+      for (let r = dataRowsStart; r <= dataRowsEnd; r++) targetRows.push(r);
+      if (fullLastMonthRowIdx !== -1) targetRows.push(fullLastMonthRowIdx);
+
+      const ensureFormulaCell = (addr: string, formula: string) => {
+        if (!ws[addr]) ws[addr] = { t: "n", v: 0 };
+        ws[addr].t = "n";
+        if (typeof ws[addr].v !== "number") ws[addr].v = 0;
+        ws[addr].f = formula;
+      };
+
+      if (selectedStandard === "is13488" || selectedStandard === "is12786") {
+        const totalMtrCol = 1 + activeSizes.length;
+        const kgStartCol = totalMtrCol + 1;
+        const totalKgCol = kgStartCol + activeSizes.length;
+        const valCol = headers.length - 1;
+
+        targetRows.forEach(R => {
+          const rowObj = R >= dataRowsStart && R <= dataRowsEnd ? (currentAuditData.rows || [])[R - dataRowsStart] : currentAuditData.fullLastMonth;
+          // Horizontal Total Meters
+          ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: totalMtrCol }), `SUM(${XLSX.utils.encode_cell({ r: R, c: 1 })}:${XLSX.utils.encode_cell({ r: R, c: activeSizes.length })})`);
+
+          // Sizewise Kgs formula = Mtr * Conv
+          if (conversionsRowIdx !== -1) {
+            for (let i = 0; i < activeSizes.length; i++) {
+              const mtrCol = 1 + i;
+              const kgCol = kgStartCol + i;
+              ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: kgCol }), `${XLSX.utils.encode_cell({ r: R, c: mtrCol })}*${XLSX.utils.encode_cell({ r: conversionsRowIdx, c: kgCol })}`);
+            }
+          }
+
+          // Horizontal Total Kgs
+          ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: totalKgCol }), `SUM(${XLSX.utils.encode_cell({ r: R, c: kgStartCol })}:${XLSX.utils.encode_cell({ r: R, c: totalKgCol - 1 })})`);
+
+          // Value (₹) formula = TotalKg * Rate
+          if (rowObj) {
+            const baseVal = Number(rowObj.total_kg || rowObj.total_mtr) || 0;
+            const rate = baseVal > 0 ? (Number(rowObj.value) || 0) / baseVal : 0;
+            const baseCol = Number(rowObj.total_kg) > 0 ? totalKgCol : totalMtrCol;
+            ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: valCol }), `${XLSX.utils.encode_cell({ r: R, c: baseCol })}*${rate.toFixed(4)}`);
+          }
+        });
+
+        // Vertical summary row formulas
+        if (summaryRowIdx !== -1 && dataRows.length > 0) {
+          for (let C = 1; C < headers.length; C++) {
+            ensureFormulaCell(XLSX.utils.encode_cell({ r: summaryRowIdx, c: C }), `SUM(${XLSX.utils.encode_cell({ r: dataRowsStart, c: C })}:${XLSX.utils.encode_cell({ r: dataRowsEnd, c: C })})`);
+          }
+        }
+      } else if (selectedStandard === "is4985") {
+        const totalPipeCol = 1 + activeSizes.length;
+        const wtStartCol = totalPipeCol + 1;
+        const totalKgCol = wtStartCol + activeSizes.length;
+        const totalMtCol = totalKgCol + 1;
+        const valCol = headers.length - 1;
+
+        targetRows.forEach(R => {
+          const rowObj = R >= dataRowsStart && R <= dataRowsEnd ? (currentAuditData.rows || [])[R - dataRowsStart] : currentAuditData.fullLastMonth;
+          // Horizontal Total Pipe
+          ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: totalPipeCol }), `SUM(${XLSX.utils.encode_cell({ r: R, c: 1 })}:${XLSX.utils.encode_cell({ r: R, c: activeSizes.length })})`);
+
+          // Sizewise Weights in Kg formula = Pipe * Conv
+          if (conversionsRowIdx !== -1) {
+            for (let i = 0; i < activeSizes.length; i++) {
+              const pipeCol = 1 + i;
+              const wtCol = wtStartCol + i;
+              ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: wtCol }), `${XLSX.utils.encode_cell({ r: R, c: pipeCol })}*${XLSX.utils.encode_cell({ r: conversionsRowIdx, c: wtCol })}`);
+            }
+          }
+
+          // Horizontal Total Weight (Kg)
+          ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: totalKgCol }), `SUM(${XLSX.utils.encode_cell({ r: R, c: wtStartCol })}:${XLSX.utils.encode_cell({ r: R, c: totalKgCol - 1 })})`);
+
+          // Total Weight (MT) formula = TotalKg / 1000
+          ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: totalMtCol }), `${XLSX.utils.encode_cell({ r: R, c: totalKgCol })}/1000`);
+
+          // Value (₹) formula = TotalKg * Rate
+          if (rowObj) {
+            const baseVal = Number(rowObj.total_wt || rowObj.total_kg) || 0;
+            const rate = baseVal > 0 ? (Number(rowObj.value) || 0) / baseVal : 0;
+            ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: valCol }), `${XLSX.utils.encode_cell({ r: R, c: totalKgCol })}*${rate.toFixed(4)}`);
+          }
+        });
+
+        // Vertical summary row formulas for IS 4985
+        if (summaryRowIdx !== -1 && dataRows.length > 0) {
+          for (let C = 1; C < headers.length; C++) {
+            if (C === totalMtCol) {
+              ensureFormulaCell(XLSX.utils.encode_cell({ r: summaryRowIdx, c: C }), `${XLSX.utils.encode_cell({ r: summaryRowIdx, c: totalKgCol })}/1000`);
+            } else {
+              ensureFormulaCell(XLSX.utils.encode_cell({ r: summaryRowIdx, c: C }), `SUM(${XLSX.utils.encode_cell({ r: dataRowsStart, c: C })}:${XLSX.utils.encode_cell({ r: dataRowsEnd, c: C })})`);
+            }
+          }
+        }
+      } else if (selectedStandard === "is17425" || selectedStandard === "is13487" || selectedStandard === "is14483") {
+        targetRows.forEach(R => {
+          const rowObj = R >= dataRowsStart && R <= dataRowsEnd ? (currentAuditData.rows || [])[R - dataRowsStart] : currentAuditData.fullLastMonth;
+          if (rowObj) {
+            const baseCol = headers.length - 2;
+            const valCol = headers.length - 1;
+            const baseVal = Number(rowObj.unit_of_1000 !== undefined ? rowObj.unit_of_1000 : (rowObj.totalQty || rowObj.pipe || rowObj.nos)) || 0;
+            const rate = baseVal > 0 ? (Number(rowObj.value) || 0) / baseVal : 0;
+            ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: valCol }), `${XLSX.utils.encode_cell({ r: R, c: baseCol })}*${rate.toFixed(4)}`);
+          }
+        });
+
+        if (summaryRowIdx !== -1 && dataRows.length > 0) {
+          for (let C = 1; C < headers.length; C++) {
+            ensureFormulaCell(XLSX.utils.encode_cell({ r: summaryRowIdx, c: C }), `SUM(${XLSX.utils.encode_cell({ r: dataRowsStart, c: C })}:${XLSX.utils.encode_cell({ r: dataRowsEnd, c: C })})`);
+          }
+        }
+      }
+    }
+    // --- End Live Formula Injection Pass ---
 
     for (let R = 0; R <= range.e.r; ++R) {
       for (let C = 0; C <= range.e.c; ++C) {
@@ -2121,11 +2276,12 @@ export default function SmsRenewalData() {
                 onChange={(e) => setSelectedYear(e.target.value)}
                 className="bg-transparent text-xs text-slate-100 font-bold focus:outline-none cursor-pointer"
               >
+                <option value="All" className="bg-slate-900">All Years (Full Period)</option>
                 <option value="2026-27" className="bg-slate-900">2026-27</option>
                 <option value="2027-28" className="bg-slate-900">2027-28</option>
                 <option value="2025-26" className="bg-slate-900">2025-26</option>
                 <option value="2024-25" className="bg-slate-900">2024-25</option>
-                <option value="All" className="bg-slate-900">All Years</option>
+                <option value="2023-24" className="bg-slate-900">2023-24</option>
               </select>
             </div>
 
@@ -2592,8 +2748,8 @@ export default function SmsRenewalData() {
                         {exportSizesConfig.is4985.map(opt => (
                           <th key={`wt_${opt.id}`} className="py-3 px-2 text-right bg-amber-500/15 text-amber-300 border-r border-amber-500/20">{opt.label.replace("(Pipe)", "wt.").replace(" Cl-", " wt. Cl-")}</th>
                         ))}
-                        <th className="py-3 px-2.5 text-right font-extrabold bg-amber-500/25 text-amber-200 border-r border-amber-500/30">total wt.</th>
-                        <th className="py-3 px-2.5 text-right font-extrabold bg-indigo-500/20 text-indigo-200 border-r border-slate-800/80">QTY (tons)</th>
+                        <th className="py-3 px-2.5 text-right font-extrabold bg-amber-500/25 text-amber-200 border-r border-amber-500/30">Total Weight (Kg)</th>
+                        <th className="py-3 px-2.5 text-right font-extrabold bg-indigo-500/20 text-indigo-200 border-r border-slate-800/80">Total Weight (MT)</th>
                         <th className="py-3 px-3 text-right">Value (₹)</th>
                       </tr>
                     </thead>
