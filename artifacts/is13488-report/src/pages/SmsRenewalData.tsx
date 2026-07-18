@@ -384,6 +384,8 @@ export default function SmsRenewalData() {
   const [isEditingLicense, setIsEditingLicense] = useState<boolean>(false);
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
   const [wizardSelectedSizes, setWizardSelectedSizes] = useState<string[]>([]);
+  const [wizardExportMode, setWizardExportMode] = useState<"entire" | "custom">("entire");
+  const [wizardSelectedMonths, setWizardSelectedMonths] = useState<string[]>([]);
   const [inlineConversions, setInlineConversions] = useState<Record<string, string>>({});
 
   // Load production & license data whenever selected standard changes or storage updates
@@ -1502,7 +1504,7 @@ export default function SmsRenewalData() {
   }, [selectedStandard, currentRenewalPeriod.start, currentRenewalPeriod.end, productionData]);
 
   // Execute size-filtered Excel Export
-  const handleConfirmExport = (selectedSizes: string[]) => {
+  const handleConfirmExport = (selectedSizes: string[], customMonths: string[] | null = null) => {
     setIsWizardOpen(false);
     const currentStdObj = smsStandardsList.find(s => s.id === selectedStandard) || smsStandardsList[0];
     const wb = XLSX.utils.book_new();
@@ -1510,10 +1512,25 @@ export default function SmsRenewalData() {
     const availableOptions = exportSizesConfig[selectedStandard] || [];
     const activeSizes = (selectedSizes && selectedSizes.length > 0) ? selectedSizes : availableOptions.map(o => o.id);
 
+    let periodText = `${currentRenewalPeriod.start} to ${currentRenewalPeriod.end}`;
+    if (customMonths && customMonths.length > 0) {
+      const sorted = [...customMonths].sort();
+      const formatMonthStr = (mStr: string) => {
+        const [yyyy, mm] = mStr.split("-");
+        const date = new Date(Number(yyyy), Number(mm) - 1, 1);
+        const month = date.toLocaleString('default', { month: 'short' });
+        const capsMonth = month.charAt(0).toUpperCase() + month.slice(1).toLowerCase();
+        return `${capsMonth} - ${yyyy}`;
+      };
+      const first = formatMonthStr(sorted[0]);
+      const last = formatMonthStr(sorted[sorted.length - 1]);
+      periodText = sorted.length === 1 ? first : `${first} to ${last}`;
+    }
+
     const titleRows = [
       [`IS CODE : ${currentStdObj.code}`],
       [`LICENSE / CM/L NO.: ${licenseInfo.cmlNumber}`],
-      [`RENEWAL PRODUCTION PERIOD: ${currentRenewalPeriod.start} to ${currentRenewalPeriod.end}`],
+      [`RENEWAL PRODUCTION PERIOD: ${periodText}`],
       []
     ];
 
@@ -1615,17 +1632,28 @@ export default function SmsRenewalData() {
       } else if (selectedStandard === "is17425") {
         row.push(totalQty, Math.round(Number(rowObj.value) || 0));
       } else if (selectedStandard === "is13487") {
-        const unit1000 = rowObj.unit_of_1000 !== undefined && rowObj.unit_of_1000 !== null && rowObj.unit_of_1000 !== "" ? Number(rowObj.unit_of_1000) : (totalQty / 1000);
-        row.push(totalQty, Math.round(unit1000 * 100) / 100, Math.round(Number(rowObj.value) || 0));
+        const unit1000 = rowObj.unit_of_1000 !== undefined && rowObj.unit_of_1000 !== null && rowObj.unit_of_1000 !== "" ? Number(rowObj.unit_of_1000) : Math.round(totalQty / 1000);
+        row.push(totalQty, Math.round(unit1000), Math.round(Number(rowObj.value) || 0));
       } else if (selectedStandard === "is14483") {
         row.push(totalQty, Math.round(Number(rowObj.value) || 0));
       }
       return row;
     };
 
-    const dataRows = (currentAuditData.rows || []).map(buildRow);
+    const filteredAuditRows = customMonths 
+      ? (currentAuditData.rows || []).filter((r: any) => customMonths.includes(r.monthKey))
+      : (currentAuditData.rows || []);
+
+    const dataRows = filteredAuditRows.map(buildRow);
     const summaryRow = currentAuditData.summary ? buildRow(currentAuditData.summary) : [];
-    const fullLastMonthRow = currentAuditData.fullLastMonth ? buildRow(currentAuditData.fullLastMonth) : [];
+    
+    let includeFullLastMonth = true;
+    if (customMonths && currentAuditData.fullLastMonth) {
+      if (!customMonths.includes(currentAuditData.fullLastMonth.monthKey)) {
+        includeFullLastMonth = false;
+      }
+    }
+    const fullLastMonthRow = (includeFullLastMonth && currentAuditData.fullLastMonth) ? buildRow(currentAuditData.fullLastMonth) : [];
 
     let conversionsRow: any[] = [];
     if (selectedStandard === "is13488" || selectedStandard === "is12786") {
@@ -1680,9 +1708,21 @@ export default function SmsRenewalData() {
 
     const range = XLSX.utils.decode_range(ws["!ref"] || "A1:Z30");
     const headerRowIdx = 4;
-    const summaryRowIdx = summaryRow.length ? headerRowIdx + dataRows.length + 1 : -1;
-    const fullLastMonthRowIdx = fullLastMonthRow.length ? summaryRowIdx + 2 : -1;
-    const conversionsRowIdx = conversionsRow.length ? fullLastMonthRowIdx + 2 : -1;
+    
+    let currentRowIdx = headerRowIdx + dataRows.length;
+    const summaryRowIdx = summaryRow.length ? ++currentRowIdx : -1;
+    
+    let fullLastMonthRowIdx = -1;
+    if (fullLastMonthRow.length) {
+      currentRowIdx += 2;
+      fullLastMonthRowIdx = currentRowIdx;
+    }
+    
+    let conversionsRowIdx = -1;
+    if (conversionsRow.length) {
+      currentRowIdx += 2;
+      conversionsRowIdx = currentRowIdx;
+    }
 
     // --- Live Formula Injection Pass (cell.f) for IS 13488, IS 12786, and IS 4985 ---
     // --- Live Formula Injection Pass (cell.f) across All 6 IS Standards ---
@@ -1706,8 +1746,11 @@ export default function SmsRenewalData() {
         const totalKgCol = kgStartCol + activeSizes.length;
         const valCol = headers.length - 1;
 
+        const globalBase = Number(currentAuditData.summary?.total_kg || currentAuditData.summary?.total_mtr) || 0;
+        const globalRate = globalBase > 0 ? (Number(currentAuditData.summary?.value) || 0) / globalBase : 0;
+
         targetRows.forEach(R => {
-          const rowObj = R >= dataRowsStart && R <= dataRowsEnd ? (currentAuditData.rows || [])[R - dataRowsStart] : currentAuditData.fullLastMonth;
+          const rowObj = R >= dataRowsStart && R <= dataRowsEnd ? filteredAuditRows[R - dataRowsStart] : currentAuditData.fullLastMonth;
           // Horizontal Total Meters
           ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: totalMtrCol }), `SUM(${XLSX.utils.encode_cell({ r: R, c: 1 })}:${XLSX.utils.encode_cell({ r: R, c: activeSizes.length })})`);
 
@@ -1726,7 +1769,7 @@ export default function SmsRenewalData() {
           // Value (₹) formula = TotalKg * Rate
           if (rowObj) {
             const baseVal = Number(rowObj.total_kg || rowObj.total_mtr) || 0;
-            const rate = baseVal > 0 ? (Number(rowObj.value) || 0) / baseVal : 0;
+            const rate = baseVal > 0 ? (Number(rowObj.value) || 0) / baseVal : globalRate;
             const baseCol = Number(rowObj.total_kg) > 0 ? totalKgCol : totalMtrCol;
             ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: valCol }), `${XLSX.utils.encode_cell({ r: R, c: baseCol })}*${rate.toFixed(4)}`);
           }
@@ -1745,8 +1788,11 @@ export default function SmsRenewalData() {
         const totalMtCol = totalKgCol + 1;
         const valCol = headers.length - 1;
 
+        const globalBase = Number(currentAuditData.summary?.total_wt || currentAuditData.summary?.total_kg) || 0;
+        const globalRate = globalBase > 0 ? (Number(currentAuditData.summary?.value) || 0) / globalBase : 0;
+
         targetRows.forEach(R => {
-          const rowObj = R >= dataRowsStart && R <= dataRowsEnd ? (currentAuditData.rows || [])[R - dataRowsStart] : currentAuditData.fullLastMonth;
+          const rowObj = R >= dataRowsStart && R <= dataRowsEnd ? filteredAuditRows[R - dataRowsStart] : currentAuditData.fullLastMonth;
           // Horizontal Total Pipe
           ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: totalPipeCol }), `SUM(${XLSX.utils.encode_cell({ r: R, c: 1 })}:${XLSX.utils.encode_cell({ r: R, c: activeSizes.length })})`);
 
@@ -1768,7 +1814,7 @@ export default function SmsRenewalData() {
           // Value (₹) formula = TotalKg * Rate
           if (rowObj) {
             const baseVal = Number(rowObj.total_wt || rowObj.total_kg) || 0;
-            const rate = baseVal > 0 ? (Number(rowObj.value) || 0) / baseVal : 0;
+            const rate = baseVal > 0 ? (Number(rowObj.value) || 0) / baseVal : globalRate;
             ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: valCol }), `${XLSX.utils.encode_cell({ r: R, c: totalKgCol })}*${rate.toFixed(4)}`);
           }
         });
@@ -1784,20 +1830,57 @@ export default function SmsRenewalData() {
           }
         }
       } else if (selectedStandard === "is17425" || selectedStandard === "is13487" || selectedStandard === "is14483") {
+        const valCol = headers.length - 1;
+        const is13487Mode = selectedStandard === "is13487";
+        const is14483Mode = selectedStandard === "is14483";
+        const totalNosCol = is13487Mode ? headers.length - 3 : headers.length - 2;
+        const baseCol = headers.length - 2;
+
+        const globalTotalNos = Number(currentAuditData.summary?.total_prod || currentAuditData.summary?.total_nos || (currentAuditData.summary as any)?.totalQty || (currentAuditData.summary as any)?.pipe || (currentAuditData.summary as any)?.nos) || 0;
+        const globalExactBaseForRate = is13487Mode ? (globalTotalNos / 1000) : globalTotalNos;
+        const globalRate = globalExactBaseForRate > 0 ? (Number(currentAuditData.summary?.value) || 0) / globalExactBaseForRate : 0;
+
         targetRows.forEach(R => {
-          const rowObj = R >= dataRowsStart && R <= dataRowsEnd ? (currentAuditData.rows || [])[R - dataRowsStart] : currentAuditData.fullLastMonth;
+          const rowObj = R >= dataRowsStart && R <= dataRowsEnd ? filteredAuditRows[R - dataRowsStart] : currentAuditData.fullLastMonth;
           if (rowObj) {
-            const baseCol = headers.length - 2;
-            const valCol = headers.length - 1;
-            const baseVal = Number(rowObj.unit_of_1000 !== undefined ? rowObj.unit_of_1000 : (rowObj.totalQty || rowObj.pipe || rowObj.nos)) || 0;
-            const rate = baseVal > 0 ? (Number(rowObj.value) || 0) / baseVal : 0;
-            ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: valCol }), `${XLSX.utils.encode_cell({ r: R, c: baseCol })}*${rate.toFixed(4)}`);
+            ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: totalNosCol }), `SUM(${XLSX.utils.encode_cell({ r: R, c: 1 })}:${XLSX.utils.encode_cell({ r: R, c: activeSizes.length })})`);
+
+            if (is13487Mode) {
+              ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: baseCol }), `ROUND(${XLSX.utils.encode_cell({ r: R, c: totalNosCol })}/1000, 0)`);
+            }
+
+            if (is14483Mode) {
+              const formulaParts = activeSizes.map((sizeId, idx) => {
+                const cellAddr = XLSX.utils.encode_cell({ r: R, c: idx + 1 });
+                let rateVal = Number(localStorage.getItem(`sms_conv_value_is14483_${sizeId}`)) || 0;
+                if (!rateVal) {
+                  if (sizeId.includes("1inch") || sizeId.includes("1\"") || sizeId === "prod_1inch") rateVal = 850;
+                  else rateVal = 1650;
+                }
+                return `(${cellAddr}*${rateVal})`;
+              });
+              ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: valCol }), formulaParts.join("+"));
+            } else {
+              const totalNos = Number(rowObj.total_prod || rowObj.total_nos || rowObj.totalQty || rowObj.pipe || rowObj.nos) || 0;
+              const exactBaseForRate = is13487Mode ? (totalNos / 1000) : totalNos;
+              const rate = exactBaseForRate > 0 ? (Number(rowObj.value) || 0) / exactBaseForRate : globalRate;
+              const cleanRate = Number(rate.toFixed(4));
+              if (is13487Mode) {
+                ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: valCol }), `(${XLSX.utils.encode_cell({ r: R, c: totalNosCol })}/1000)*${cleanRate}`);
+              } else {
+                ensureFormulaCell(XLSX.utils.encode_cell({ r: R, c: valCol }), `${XLSX.utils.encode_cell({ r: R, c: baseCol })}*${cleanRate}`);
+              }
+            }
           }
         });
 
         if (summaryRowIdx !== -1 && dataRows.length > 0) {
           for (let C = 1; C < headers.length; C++) {
-            ensureFormulaCell(XLSX.utils.encode_cell({ r: summaryRowIdx, c: C }), `SUM(${XLSX.utils.encode_cell({ r: dataRowsStart, c: C })}:${XLSX.utils.encode_cell({ r: dataRowsEnd, c: C })})`);
+            if (is13487Mode && C === baseCol) {
+              ensureFormulaCell(XLSX.utils.encode_cell({ r: summaryRowIdx, c: C }), `ROUND(${XLSX.utils.encode_cell({ r: summaryRowIdx, c: totalNosCol })}/1000, 0)`);
+            } else {
+              ensureFormulaCell(XLSX.utils.encode_cell({ r: summaryRowIdx, c: C }), `SUM(${XLSX.utils.encode_cell({ r: dataRowsStart, c: C })}:${XLSX.utils.encode_cell({ r: dataRowsEnd, c: C })})`);
+            }
           }
         }
       }
@@ -1883,10 +1966,10 @@ export default function SmsRenewalData() {
           }
         };
 
-        if (typeof cell.v === "number") {
+        if (typeof cell.v === "number" || cell.f) {
           if (isConversionsRow) cell.z = "#,##0.0000";
           else if (headers[C]?.includes("₹")) cell.z = "₹#,##0";
-          else if (headers[C]?.includes("Mtr.") || headers[C]?.includes("Nos.") || headers[C]?.includes("Pipe")) cell.z = "#,##0";
+          else if (headers[C]?.includes("Mtr.") || headers[C]?.includes("Nos.") || headers[C]?.includes("Pipe") || headers[C]?.includes("1000 Unit")) cell.z = "#,##0";
           else cell.z = "#,##0.00";
         }
       }
@@ -1903,6 +1986,16 @@ export default function SmsRenewalData() {
 
   // Open Export Wizard Modal with Size selection and conversion checks
   const handleDownloadRenewalExcel = () => {
+    let auditData: any = is13488AuditData;
+    if (selectedStandard === "is12786") auditData = is12786AuditData;
+    else if (selectedStandard === "is17425") auditData = is17425AuditData;
+    else if (selectedStandard === "is13487") auditData = is13487AuditData;
+    else if (selectedStandard === "is14483") auditData = is14483AuditData;
+    else if (selectedStandard === "is4985") auditData = is4985AuditData;
+
+    setWizardExportMode("entire");
+    setWizardSelectedMonths((auditData.rows || []).map((r: any) => r.monthKey));
+
     const config = exportSizesConfig[selectedStandard];
     if (config && config.length > 0) {
       setWizardSelectedSizes(config.map(c => c.id));
@@ -1916,7 +2009,7 @@ export default function SmsRenewalData() {
       setInlineConversions(loadedConversions);
       setIsWizardOpen(true);
     } else {
-      handleConfirmExport([]);
+      handleConfirmExport([], null);
     }
   };
 
@@ -1931,13 +2024,14 @@ export default function SmsRenewalData() {
   const currentStandardObj = smsStandardsList.find(s => s.id === selectedStandard) || smsStandardsList[0];
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] bg-slate-950 text-slate-100 py-8 px-4 sm:px-6 font-sans relative overflow-hidden">
+    <div className="min-h-[calc(100vh-3.5rem)] bg-slate-950 text-slate-100 py-8 px-4 sm:px-6 font-sans relative">
       {/* Subtle Background Radial Glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-b from-indigo-500/10 via-purple-500/5 to-transparent blur-3xl pointer-events-none -z-10" />
-
-      <div className="max-w-7xl mx-auto space-y-8 relative z-10">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-b from-indigo-500/10 via-purple-500/5 to-transparent blur-3xl" />
+      </div>
+      <div className="w-full max-w-[1600px] 2xl:max-w-[95%] mx-auto space-y-8 relative z-10">
         {/* Top Header & Intro Banner */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-900">
+        <div className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col md:flex-row md:items-center justify-between gap-6 py-6 border-b border-slate-800 -mx-4 px-4 sm:-mx-6 sm:px-6 shadow-lg shadow-slate-950/20">
           <div className="space-y-2">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-white">
@@ -1955,16 +2049,6 @@ export default function SmsRenewalData() {
             <p className="text-slate-400 text-sm max-w-3xl leading-relaxed">
               Maintain, verify, and export standardized production statements required for Bureau of Indian Standards (BIS / ISI) periodic license renewal audits across all 6 manufactured IS standards.
             </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              onClick={handleDownloadRenewalExcel}
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/35 transition-all duration-300 flex items-center gap-2.5"
-            >
-              <Download className="w-4 h-4" />
-              <span>Download Renewal Format</span>
-            </Button>
           </div>
         </div>
 
@@ -2128,16 +2212,6 @@ export default function SmsRenewalData() {
                 </div>
               </div>
 
-              {/* Remarks Banner (Full Width, Easy to Read, Never Truncates) */}
-              <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3 hover:border-slate-700/80 transition-all">
-                <div className="flex items-center gap-2 text-slate-400 shrink-0 sm:w-56">
-                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Testing Agency / QC Remarks</span>
-                </div>
-                <div className="text-sm text-slate-300 leading-relaxed font-normal flex-1 sm:border-l sm:border-slate-800/80 sm:pl-4 bg-slate-900/30 sm:bg-transparent p-2.5 sm:p-0 rounded-lg border border-slate-800/50 sm:border-0">
-                  {licenseInfo.remarks || "No additional remarks logged for this license."}
-                </div>
-              </div>
             </div>
           ) : (
             /* Editing Mode Panel */
@@ -2183,16 +2257,6 @@ export default function SmsRenewalData() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1.5">Testing Agency / QC Remarks</label>
-                  <input
-                    type="text"
-                    value={licenseInfo.remarks}
-                    onChange={(e) => setLicenseInfo({ ...licenseInfo, remarks: e.target.value })}
-                    placeholder="e.g. Emitting pipes in-line & online drip irrigation lateral tubes as per IS 13488"
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
-                  />
-                </div>
 
                 <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800/80">
                   <Button 
@@ -2900,23 +2964,6 @@ export default function SmsRenewalData() {
             </div>
           )}
         </div>
-
-        {/* Required Format Information Box */}
-        <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-transparent p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0 mt-0.5">
-              <HelpCircle className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-slate-100">
-                Next Step: Customizing Required License Formats
-              </h4>
-              <p className="text-xs text-slate-400 mt-1 max-w-3xl leading-relaxed">
-                The navigation tab <strong className="text-indigo-300">Renewal Data</strong> is now live on the navbar. We have structured this production-based renewal audit dashboard for all 6 IS standards. Please let us know the exact required format specifications (column order, headers, or formulas) for each standard so we can fine-tune the Excel export layout!
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Export Wizard Modal */}
@@ -2935,6 +2982,86 @@ export default function SmsRenewalData() {
           </DialogHeader>
 
           <div className="space-y-4 my-2 flex-1 overflow-y-auto pr-2 min-h-0 custom-scrollbar">
+
+            {/* NEW: Production Period Selection */}
+            <div className="space-y-3 pb-3 border-b border-slate-800/80">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
+                Production Period
+              </span>
+              <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setWizardExportMode("entire")}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${wizardExportMode === "entire" ? "bg-slate-800 text-indigo-300 shadow-sm" : "text-slate-400 hover:text-slate-300 hover:bg-slate-800/50"}`}
+                >
+                  Entire Period
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardExportMode("custom")}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${wizardExportMode === "custom" ? "bg-slate-800 text-indigo-300 shadow-sm" : "text-slate-400 hover:text-slate-300 hover:bg-slate-800/50"}`}
+                >
+                  Custom Months
+                </button>
+              </div>
+
+              {wizardExportMode === "custom" && (
+                <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-800/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Select months to export:</span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWizardSelectedMonths(((() => {
+                            let auditData: any = is13488AuditData;
+                            if (selectedStandard === "is12786") auditData = is12786AuditData;
+                            else if (selectedStandard === "is17425") auditData = is17425AuditData;
+                            else if (selectedStandard === "is13487") auditData = is13487AuditData;
+                            else if (selectedStandard === "is14483") auditData = is14483AuditData;
+                            else if (selectedStandard === "is4985") auditData = is4985AuditData;
+                            return (auditData.rows || []).map((r: any) => r.monthKey);
+                        })()))}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
+                      >All</button>
+                      <button
+                        type="button"
+                        onClick={() => setWizardSelectedMonths([])}
+                        className="text-[10px] text-slate-400 hover:text-slate-300 underline underline-offset-2"
+                      >None</button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar">
+                    {(() => {
+                      let auditData: any = is13488AuditData;
+                      if (selectedStandard === "is12786") auditData = is12786AuditData;
+                      else if (selectedStandard === "is17425") auditData = is17425AuditData;
+                      else if (selectedStandard === "is13487") auditData = is13487AuditData;
+                      else if (selectedStandard === "is14483") auditData = is14483AuditData;
+                      else if (selectedStandard === "is4985") auditData = is4985AuditData;
+                      return (auditData.rows || []).map((r: any) => {
+                        const isSelected = wizardSelectedMonths.includes(r.monthKey);
+                        return (
+                          <label key={r.monthKey} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono cursor-pointer transition-colors ${isSelected ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-200" : "bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800"}`}>
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) setWizardSelectedMonths(prev => [...prev, r.monthKey]);
+                                else setWizardSelectedMonths(prev => prev.filter(k => k !== r.monthKey));
+                              }}
+                            />
+                            {isSelected && <CheckCircle2 className="w-3 h-3 text-indigo-400" />}
+                            {r.monthLabel}
+                          </label>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between pb-2 border-b border-slate-800/80 sticky top-0 bg-slate-950/95 z-10 py-1">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Available Sizes ({exportSizesConfig[selectedStandard]?.length || 0})
@@ -3072,7 +3199,7 @@ export default function SmsRenewalData() {
                   return !val || Number(val) <= 0;
                 })
               }
-              onClick={() => handleConfirmExport(wizardSelectedSizes)}
+              onClick={() => handleConfirmExport(wizardSelectedSizes, wizardExportMode === 'entire' ? null : wizardSelectedMonths)}
               className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
@@ -3081,6 +3208,21 @@ export default function SmsRenewalData() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Floating Action Button for Export */}
+      <div className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 z-50 flex items-center justify-center">
+        <Button
+          onClick={handleDownloadRenewalExcel}
+          className="group relative flex items-center justify-start h-14 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-full shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:shadow-[0_0_30px_rgba(99,102,241,0.6)] transition-all duration-300 ease-in-out overflow-hidden w-14 hover:w-64 px-0"
+        >
+          <div className="flex items-center justify-center w-14 h-14 shrink-0">
+            <Download className="w-5 h-5" />
+          </div>
+          <span className="whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out text-[15px] opacity-0 group-hover:opacity-100 max-w-0 group-hover:max-w-xs group-hover:pr-5">
+            Download Renewal Data
+          </span>
+        </Button>
+      </div>
     </div>
   );
 }
