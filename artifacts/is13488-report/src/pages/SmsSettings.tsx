@@ -135,6 +135,13 @@ interface ConversionItem {
   value: number;
 }
 
+export interface AutoProduceLimitItem {
+  standardId: string;
+  sizeName: string;
+  min: number;
+  max: number;
+}
+
 export interface ConsigneeDetails {
   id?: string;
   name: string;
@@ -152,7 +159,7 @@ export interface ConsigneeDetails {
 
 export default function SmsSettings() {
   const [, navigate] = useLocation();
-  const [activeTab, setActiveTab] = useState<"overrides" | "conversions" | "data" | "maintenance" | "consignees">("overrides");
+  const [activeTab, setActiveTab] = useState<"overrides" | "conversions" | "data" | "maintenance" | "consignees" | "autoproduce">("overrides");
   const [overrides, setOverrides] = useState<OverrideStockItem[]>([]);
   
   // Consignee states
@@ -198,6 +205,17 @@ export default function SmsSettings() {
   const [editingConvValue, setEditingConvValue] = useState<string>("");
   const [convError, setConvError] = useState<string>("");
 
+  // Add new auto-produce limit states
+  const [autoProduceLimits, setAutoProduceLimits] = useState<AutoProduceLimitItem[]>([]);
+  const [apStd, setApStd] = useState<string>("is13487");
+  const [apSize, setApSize] = useState<string>("");
+  const [apMin, setApMin] = useState<string>("");
+  const [apMax, setApMax] = useState<string>("");
+  const [editingApKey, setEditingApKey] = useState<string | null>(null);
+  const [editingApMin, setEditingApMin] = useState<string>("");
+  const [editingApMax, setEditingApMax] = useState<string>("");
+  const [apError, setApError] = useState<string>("");
+
   // Confirmation Modal states
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean;
@@ -227,6 +245,14 @@ export default function SmsSettings() {
       setConvSize(sizes[0]);
     }
   }, [convStd]);
+
+  // Load active size list for auto-produce standard
+  useEffect(() => {
+    const sizes = standardSizes[apStd] || [];
+    if (sizes.length > 0) {
+      setApSize(sizes[0]);
+    }
+  }, [apStd]);
 
   // Load all overrides from localStorage
   const loadOverrides = () => {
@@ -306,6 +332,30 @@ export default function SmsSettings() {
     setConversions(Array.from(map.values()).sort((a, b) => a.standardId.localeCompare(b.standardId) || a.sizeName.localeCompare(b.sizeName)));
   };
 
+  // Load all auto-produce limits from localStorage
+  const loadAutoProduceLimits = () => {
+    const items: AutoProduceLimitItem[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("sms_autoproduce_limits_")) {
+        try {
+          const val = JSON.parse(localStorage.getItem(key) || "{}");
+          if (val && val.standardId && val.sizeName) {
+            items.push({
+              standardId: val.standardId,
+              sizeName: val.sizeName,
+              min: Number(val.min) || 0,
+              max: Number(val.max) || 0
+            });
+          }
+        } catch (e) {
+          console.error("Failed to parse auto produce limits for key", key);
+        }
+      }
+    }
+    setAutoProduceLimits(items.sort((a, b) => a.standardId.localeCompare(b.standardId) || a.sizeName.localeCompare(b.sizeName)));
+  };
+
   const loadConsigneesList = async () => {
     // Load local list (combined defaults + custom) first
     const localList = smsStorage.getLocalConsignees();
@@ -324,6 +374,7 @@ export default function SmsSettings() {
     initializeDefaultConversions();
     loadOverrides();
     loadConversions();
+    loadAutoProduceLimits();
     loadConsigneesList();
     cleanupLegacyImportedConsigneeData();
   }, []);
@@ -1172,6 +1223,18 @@ export default function SmsSettings() {
           </button>
 
           <button
+            onClick={() => setActiveTab("autoproduce")}
+            className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all w-full ${
+              activeTab === "autoproduce" 
+                ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-md shadow-indigo-500/5" 
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60"
+            }`}
+          >
+            <Settings className="w-4 h-4 text-pink-400" />
+            <span>Auto-Produce Limits</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("consignees")}
             className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all w-full ${
               activeTab === "consignees" 
@@ -1198,6 +1261,145 @@ export default function SmsSettings() {
 
         {/* Setting View Pane */}
         <main className="flex-1 bg-slate-900/20 border border-slate-900/80 rounded-2xl p-6 min-h-[400px]">
+          {/* TAB 1: AUTO-PRODUCE LIMITS */}
+          {activeTab === "autoproduce" && (() => {
+            const handleSaveLimit = (e: React.FormEvent) => {
+              e.preventDefault();
+              if (!apStd || !apSize || !apMin || !apMax) {
+                setApError("Min and Max are required.");
+                return;
+              }
+              const numMin = Number(apMin);
+              const numMax = Number(apMax);
+              if (numMin > numMax) {
+                setApError("Min cannot be greater than Max.");
+                return;
+              }
+              
+              const payload = {
+                standardId: apStd,
+                sizeName: apSize,
+                min: numMin,
+                max: numMax
+              };
+
+              const key = `sms_autoproduce_limits_${apStd}_${apSize}`;
+              localStorage.setItem(key, JSON.stringify(payload));
+              
+              setApError("");
+              setApMin("");
+              setApMax("");
+              loadAutoProduceLimits();
+            };
+
+            const handleDeleteLimit = (std: string, sz: string) => {
+              const key = `sms_autoproduce_limits_${std}_${sz}`;
+              localStorage.removeItem(key);
+              loadAutoProduceLimits();
+            };
+
+            return (
+              <div className="space-y-8">
+                <div className="p-4 bg-pink-950/20 border border-pink-500/15 rounded-xl text-xs text-pink-300 leading-relaxed">
+                  Configure Auto-Produce limits for IS 13487 (Emitters) and IS 14483 (Venturi Injectors). The Smart Auto-Produce engine will generate production batches between the <strong>Min</strong> and <strong>Max</strong> quantities (rounded to nearest 100) on safe dates.
+                </div>
+
+                <form onSubmit={handleSaveLimit} className="bg-slate-900/50 border border-slate-900 p-5 rounded-xl space-y-4">
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-pink-400" />
+                    Set Size Limits
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Standard</label>
+                      <select
+                        value={apStd}
+                        onChange={(e) => setApStd(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-pink-500/50"
+                      >
+                        <option value="is13487">IS 13487 (Emitters)</option>
+                        <option value="is14483">IS 14483 (Venturi Injector)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Size</label>
+                      <select
+                        value={apSize}
+                        onChange={(e) => setApSize(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-pink-500/50"
+                      >
+                        {(standardSizes[apStd] || []).map((sz) => (
+                          <option key={sz} value={sz}>{sz}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Min Qty/Day</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 2000"
+                        value={apMin}
+                        onChange={(e) => setApMin(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-pink-500/50"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Max Qty/Day</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 5000"
+                        value={apMax}
+                        onChange={(e) => setApMax(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-pink-500/50"
+                      />
+                    </div>
+                  </div>
+
+                  {apError && <p className="text-red-400 text-xs mt-2">{apError}</p>}
+                  
+                  <div className="flex justify-end pt-2">
+                    <Button type="submit" className="bg-pink-600 hover:bg-pink-500 text-white h-8 text-xs px-4">
+                      Save Limit Configuration
+                    </Button>
+                  </div>
+                </form>
+
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-slate-200">Current Limits</h3>
+                  {autoProduceLimits.length === 0 ? (
+                    <div className="p-8 text-center border border-dashed border-slate-800 rounded-xl text-slate-500 text-sm">
+                      No limits configured yet.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      {autoProduceLimits.map((item) => (
+                        <div key={`${item.standardId}_${item.sizeName}`} className="flex items-center justify-between p-3 bg-slate-900/40 border border-slate-800/60 rounded-lg">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-200">{smsStandards[item.standardId]?.name} - {item.sizeName}</span>
+                            <span className="text-[10px] text-slate-400 font-mono mt-1">
+                              Min: {item.min.toLocaleString()} | Max: {item.max.toLocaleString()}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteLimit(item.standardId, item.sizeName)}
+                            className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                            title="Remove Limit"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* TAB 1: OVERRIDES */}
           {activeTab === "overrides" && (
             <div className="space-y-8">

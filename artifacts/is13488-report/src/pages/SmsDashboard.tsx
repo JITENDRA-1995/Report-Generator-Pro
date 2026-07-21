@@ -6,7 +6,8 @@ import {
   Layers, 
   Disc, 
   Gauge,
-  ArrowRight
+  ArrowRight,
+  Zap
 } from "lucide-react";
 
 interface SmsStandardItem {
@@ -133,10 +134,31 @@ export default function SmsDashboard() {
         tagStyle: "text-rose-400 border-rose-500/20 bg-rose-500/5 group-hover:bg-rose-500/10 group-hover:border-rose-500/35 group-hover:text-rose-200"
       }
     },
+    {
+      id: "smart-production",
+      name: "GLOBAL TOOL",
+      subName: "Smart Production",
+      desc: "Automatically calculate and generate production entries for IS 13487 and IS 14483 concurrently across all sizes to meet your target stock.",
+      icon: Zap,
+      theme: {
+        glowGradient: "from-purple-500/20 to-fuchsia-500/20",
+        iconBg: "bg-purple-500/5",
+        iconBorder: "border-purple-500/10",
+        iconText: "text-purple-400",
+        iconHoverBg: "group-hover:bg-purple-500/15",
+        textHover: "group-hover:text-purple-400",
+        accentBg: "bg-purple-500",
+        tagStyle: "text-purple-400 border-purple-500/20 bg-purple-500/5 group-hover:bg-purple-500/10 group-hover:border-purple-500/35 group-hover:text-purple-200"
+      }
+    }
   ];
 
   const handleCardClick = (item: SmsStandardItem) => {
-    navigate(`/sms/standard/${item.id}`);
+    if (item.id === "smart-production") {
+      navigate("/sms/smart-production");
+    } else {
+      navigate(`/sms/standard/${item.id}`);
+    }
   };
 
   return (

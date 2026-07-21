@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, LogOut, LayoutDashboard, Settings, FileSpreadsheet, FileCheck } from "lucide-react";
+import { Home, LogOut, LayoutDashboard, Settings, FileSpreadsheet, FileCheck, Zap } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ export function SmsLayout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/sms", label: "Home", icon: Home },
+    { href: "/sms/smart-production", label: "Smart Production", icon: Zap },
     { href: "/sms/universal", label: "Universal Import & Export", icon: FileSpreadsheet },
     { href: "/sms/renewal", label: "Renewal Data", icon: FileCheck },
     { href: "/sms/settings", label: "Settings", icon: Settings },

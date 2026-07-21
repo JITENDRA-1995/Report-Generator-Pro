@@ -24,7 +24,9 @@ import {
   Eye,
   X,
   Table,
-  Info
+  Info,
+  Zap,
+  Wand2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as XLSX from "xlsx";
@@ -229,6 +231,8 @@ export default function SmsEntryPanel() {
     mobile: string;
     email: string;
   } | null>(null);
+
+  // Removed Smart Auto-Produce States
 
   const registeredNames = useMemo(() => {
     const names = new Set<string>();
@@ -640,6 +644,8 @@ export default function SmsEntryPanel() {
       }
     }
   };
+
+
 
   const handleAddEntry = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1138,29 +1144,31 @@ export default function SmsEntryPanel() {
 
   // Helper to determine the auto-calculated closing stock of the preceding month
   const getAutoClosingStockForPrevMonth = () => {
-    const mIdx = MONTHS.indexOf(stockMonth) + 1;
-    const mStr = mIdx < 10 ? `0${mIdx}` : `${mIdx}`;
-    const targetPeriod = `${stockYear}-${mStr}`;
-
-    const matchingEntry = [...combinedStockEntries].reverse().find((entry) => {
-      const [entryYr, entryMo] = entry.date.split("-");
-      const entryPeriod = `${entryYr}-${entryMo}`;
-      return entryPeriod <= targetPeriod;
-    });
-
-    if (matchingEntry) {
-      return matchingEntry.closingStock.toString();
-    }
-
     const manualKey = `sms_last_stock_${id}_${selectedSize}_${stockYear}_${stockMonth}`;
     const saved = localStorage.getItem(manualKey);
     if (saved !== null) {
       return saved;
     }
 
-    const hasLogs = hasEntriesInPrevMonth();
-    if (!hasLogs) {
-      return "-";
+    const mIdx = MONTHS.indexOf(stockMonth);
+    const prevMIdx = mIdx === 0 ? 11 : mIdx - 1;
+    const prevYearVal = mIdx === 0 ? Number(stockYear) - 1 : Number(stockYear);
+    const prevMStr = (prevMIdx + 1) < 10 ? `0${prevMIdx + 1}` : `${prevMIdx + 1}`;
+    const prevPeriod = `${prevYearVal}-${prevMStr}`;
+
+    const matchingEntry = [...combinedStockEntries].reverse().find((entry) => {
+      const [entryYr, entryMo] = entry.date.split("-");
+      const entryPeriod = `${entryYr}-${entryMo}`;
+      return entryPeriod <= prevPeriod;
+    });
+
+    if (matchingEntry) {
+      return matchingEntry.closingStock.toString();
+    }
+
+    const oldFallback = localStorage.getItem(`sms_last_stock_${id}_${selectedSize}`);
+    if (oldFallback !== null) {
+      return oldFallback;
     }
 
     return "0";
@@ -1168,15 +1176,8 @@ export default function SmsEntryPanel() {
 
   // Helper to check if there are entries in the preceding month
   const hasEntriesInPrevMonth = () => {
-    const mIdx = MONTHS.indexOf(stockMonth) + 1;
-    const mStr = mIdx < 10 ? `0${mIdx}` : `${mIdx}`;
-    const targetPeriod = `${stockYear}-${mStr}`;
-
-    return combinedStockEntries.some((entry) => {
-      const [entryYr, entryMo] = entry.date.split("-");
-      const entryPeriod = `${entryYr}-${entryMo}`;
-      return entryPeriod === targetPeriod;
-    });
+    const val = getAutoClosingStockForPrevMonth();
+    return val !== "-" && val !== null && val !== undefined;
   };
 
   // Filter combined stock entries based on selected range (fromMonth/fromYear to toMonth/toYear)
@@ -5102,7 +5103,19 @@ export default function SmsEntryPanel() {
                     <div className="flex items-center gap-1.5">
                       <select
                         value={fromMonth}
-                        onChange={(e) => setFromMonth(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFromMonth(val);
+                          setStockMonth(val);
+                          const mIdx = MONTHS.indexOf(val);
+                          const toMIdx = MONTHS.indexOf(toMonth);
+                          const yr = Number(fromYear);
+                          const toYr = Number(toYear);
+                          if (toYr < yr || (toYr === yr && toMIdx < mIdx)) {
+                            setToMonth(val);
+                            setToYear(fromYear);
+                          }
+                        }}
                         className="bg-slate-950 border border-slate-900 text-slate-100 rounded-xl px-2 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 transition-colors h-9 cursor-pointer w-full"
                         title="Stock From Month"
                       >
@@ -5112,7 +5125,19 @@ export default function SmsEntryPanel() {
                       </select>
                       <select
                         value={fromYear}
-                        onChange={(e) => setFromYear(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFromYear(val);
+                          setStockYear(val);
+                          const yr = Number(val);
+                          const toYr = Number(toYear);
+                          const mIdx = MONTHS.indexOf(fromMonth);
+                          const toMIdx = MONTHS.indexOf(toMonth);
+                          if (toYr < yr || (toYr === yr && toMIdx < mIdx)) {
+                            setToYear(val);
+                            setToMonth(fromMonth);
+                          }
+                        }}
                         className="bg-slate-950 border border-slate-900 text-slate-100 rounded-xl px-2 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 transition-colors h-9 cursor-pointer w-full"
                         title="Stock From Year"
                       >
@@ -5883,6 +5908,8 @@ export default function SmsEntryPanel() {
           </div>
         </div>
       )}
+
+
     </div>
   );
 }

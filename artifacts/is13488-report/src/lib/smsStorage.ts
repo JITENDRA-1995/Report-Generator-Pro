@@ -259,7 +259,7 @@ export function getLocalProduction(standardId: string): ProductionEntry[] {
 export async function saveProductionEntry(standardId: string, entry: ProductionEntry): Promise<void> {
   const entryWithSync = { ...entry, synced: false };
   const all = getLocalProduction(standardId);
-  const idx = all.findIndex(e => e.id === entry.id || (e.date === entry.date && e.size === entry.size));
+  const idx = all.findIndex(e => e.id === entry.id);
   if (idx >= 0) {
     all[idx] = entryWithSync;
   } else {

@@ -16,6 +16,7 @@ import SmsEntryPanel from "@/pages/SmsEntryPanel";
 import SmsSettings from "@/pages/SmsSettings";
 import SmsUniversal from "@/pages/SmsUniversal";
 import SmsRenewalData from "@/pages/SmsRenewalData";
+import SmsSmartProduction from "@/pages/SmsSmartProduction";
 
 import { Layout } from "@/components/Layout";
 import { SmsLayout } from "@/components/SmsLayout";
@@ -114,6 +115,11 @@ function Router() {
       <Route path="/sms/settings">
         <SmsLayout>
           <SmsSettings />
+        </SmsLayout>
+      </Route>
+      <Route path="/sms/smart-production">
+        <SmsLayout>
+          <SmsSmartProduction />
         </SmsLayout>
       </Route>
       <Route>
