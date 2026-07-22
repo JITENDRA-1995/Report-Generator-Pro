@@ -1293,6 +1293,45 @@ export default function SmsEntryPanel() {
     XLSXStyle.writeFile(wb, `SMS_Consignee_Sales_Template_${(id || "").toUpperCase()}.xlsx`);
   };
 
+  const handleDownload20mmCl1Template = () => {
+    const wsData = [
+      ["20MM CL-1", ""],
+      ["Date", "Qty"],
+      ["", ""],
+      ["", ""],
+      ["", ""],
+      ["", ""]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    ws["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }
+    ];
+
+    ws["!cols"] = [{ wch: 18 }, { wch: 14 }];
+
+    const thinBorder = {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } }
+    };
+
+    ["A1", "B1", "A2", "B2", "A3", "B3", "A4", "B4", "A5", "B5", "A6", "B6"].forEach((cellRef) => {
+      if (!ws[cellRef]) ws[cellRef] = { v: "", t: "s" };
+      ws[cellRef].s = {
+        font: { name: "Calibri", sz: 11, bold: cellRef === "A1" || cellRef === "A2" || cellRef === "B2" },
+        alignment: { horizontal: cellRef === "A1" ? "center" : "left", vertical: "center" },
+        border: thinBorder
+      };
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "20MM CL-1");
+    XLSXStyle.writeFile(wb, "20MM_CL1_Dispatch_Template.xlsx");
+  };
+
   // Parser helper
   function parseExcelDate(val: any): string {
     if (!val) return new Date().toISOString().split("T")[0];
@@ -4826,6 +4865,15 @@ export default function SmsEntryPanel() {
                             className="hidden" 
                           />
                         </label>
+                        <Button
+                          onClick={handleDownload20mmCl1Template}
+                          size="sm"
+                          variant="outline"
+                          className="border-emerald-500/30 bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-400 rounded-xl px-3 py-2 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Template
+                        </Button>
                         <Button
                           onClick={handleReconcileCl1}
                           size="sm"
